@@ -96,3 +96,25 @@ class GameState:
             "properties": self.properties,
             "recent_events": self.events[-10:]  # Last 10 events
         }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]):
+        """Reconstruct a GameState from a dict (used for persistence)."""
+        gs = cls()
+        gs.turn = data.get('turn', 0)
+        gs.properties = data.get('properties', gs.properties)
+        gs.events = data.get('events', data.get('recent_events', []))
+
+        entities = data.get('entities', {})
+        gs.entities = {}
+        for eid, ed in entities.items():
+            ent = Entity(
+                id=ed.get('id', eid),
+                type=ed.get('type', 'unknown'),
+                x=ed.get('x', 0),
+                y=ed.get('y', 0),
+                properties=ed.get('properties', {})
+            )
+            gs.entities[ent.id] = ent
+
+        return gs
