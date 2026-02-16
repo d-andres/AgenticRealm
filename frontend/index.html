@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='utf-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1'>
+    <title>AgenticRealm</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000000;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        }
+        #app {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        .status {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 15px;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: #00ff00;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            border: 1px solid #00ff00;
+            border-radius: 4px;
+            max-width: 300px;
+        }
+        .status-connected {
+            color: #00ff00;
+        }
+        .status-disconnected {
+            color: #ff0000;
+        }
+    </style>
+</head>
+<body>
+    <div id='app'></div>
+    <div class='status'>
+        <div>AgenticRealm Client</div>
+        <div id='connection-status' class='status-disconnected'>Connecting...</div>
+        <div id='server-info'>Server: localhost:8000</div>
+    </div>
+    
+    <script type='module' src='./src/main.js'></script>
+</body>
+</html>

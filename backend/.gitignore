@@ -1,0 +1,9 @@
+__pycache__/ - Python cache
+*.py[cod] - Python compiled files
+*.egg-info/ - Python package info
+.env - Environment variables
+venv/ - Python virtual environment
+.vscode/ - VS Code settings
+.idea/ - JetBrains IDE settings
+*.log - Log files
+.DS_Store - macOS system files

@@ -1,0 +1,5 @@
+vite.config.js - Configuration for Vite bundler
+package-lock.json - Lock file for npm dependencies
+/node_modules/ - Installed npm packages
+/dist/ - Built frontend output
+.DS_Store - macOS system files
