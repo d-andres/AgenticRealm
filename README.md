@@ -50,69 +50,28 @@ Perfect for educational purposes, research, and experimentation with AI decision
 
 ## Quick Start
 
-### Prerequisites
-- Python 3.9 or higher
-- Node.js 16+ and npm
-- Git
+See [GETTING_STARTED.md](GETTING_STARTED.md) for detailed setup instructions.
 
-### Installation & Setup
-
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd AgenticRealm
-   ```
-
-2. **Backend Setup**
-   ```bash
-   cd backend
-   python -m venv venv
-   
-   # On macOS/Linux:
-   source venv/bin/activate
-   # On Windows:
-   venv\Scripts\activate
-   
-   pip install -r requirements.txt
-   ```
-
-3. **Frontend Setup**
-   ```bash
-   cd ../frontend
-   npm install
-   ```
-
-4. **Configure Environment**
-   ```bash
-   # In the project root, edit .env with your API keys
-   cp .env.example .env
-   # Add your LLM provider API keys to .env
-   ```
-
-### Running the Application
-
-**Terminal 1 - Start Backend Server:**
+**TL;DR:**
 ```bash
+# Backend (Terminal 1)
 cd backend
-source venv/bin/activate  # or venv\Scripts\activate on Windows
-python main.py
-```
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+python3 main.py
 
-Backend will be available at `http://localhost:8000`
-
-**Terminal 2 - Start Frontend Dev Server:**
-```bash
+# Frontend (Terminal 2)
 cd frontend
+npm install
 npm run dev
 ```
 
-Frontend will be available at `http://localhost:5173`
-
-Open your browser and navigate to `http://localhost:5173` to interact with the simulation.
+Then open `http://localhost:5173` in your browser.
 
 ## Project Structure
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed information about the project structure and components.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed system design and component overview.
 
 ```
 AgenticRealm/
@@ -140,8 +99,9 @@ AgenticRealm/
 │
 ├── assets/                     # Raw design files (Tiled maps, etc.)
 ├── .env                        # Configuration (API keys, settings)
-├── README.md                   # This file
-└── ARCHITECTURE.md            # Detailed architecture documentation
+├── GETTING_STARTED.md          # Setup and testing guide
+├── ARCHITECTURE.md             # System design documentation
+└── README.md                   # This file
 ```
 
 ## Core Concepts
@@ -307,7 +267,10 @@ See [LICENSE](LICENSE) file for details.
 
 ## Support
 
-For questions, issues, or ideas:
+For setup and testing:
+- See [GETTING_STARTED.md](GETTING_STARTED.md) for detailed instructions and troubleshooting
+
+For system architecture:
 - Check [ARCHITECTURE.md](ARCHITECTURE.md) for implementation details
 - Review example agents in `backend/agents/`
 - Check implementation status in [Roadmap](#roadmap)

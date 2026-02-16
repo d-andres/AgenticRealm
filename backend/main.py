@@ -6,7 +6,7 @@ Handles WebSocket communication between the frontend and the AI orchestration en
 """
 
 from fastapi import FastAPI, WebSocketDisconnect
-from fastapi.cors import CORSMiddleware
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import socketio
 import asyncio

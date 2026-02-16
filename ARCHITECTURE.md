@@ -8,30 +8,6 @@ This directory contains the starter structure for the AgenticRealm project - an 
 - **Frontend (`/frontend`)**: The game interface (JavaScript + Phaser.io)
 - **Assets (`/assets`)**: Raw design files and resources (Tiled maps, etc.)
 
-## Quick Start
-
-### Backend Setup
-
-```bash
-cd backend
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
-python main.py
-```
-
-The backend server will start on `http://localhost:8000`
-
-### Frontend Setup
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-The frontend will be available on `http://localhost:5173`
-
 ## Project Structure Details
 
 ### Backend
