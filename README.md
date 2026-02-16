@@ -1,60 +1,49 @@
 # AgenticRealm
 
-An educational platform for designing and testing AI agents in an interactive simulation environment. Users create custom AI agents that navigate challenges, solve puzzles, and interact with a dynamic world.
+**AgenticRealm** is an educational platform and **Agentic AI System** where users design external AI agents that compete against built-in system AI agents in interactive game scenarios.
 
-## Project Overview
+Learn prompt engineering and agentic workflows by designing agents that win against intelligent opponents.
 
-**AgenticRealm** is an agentic AI system that combines:
-- **Backend Orchestration Engine** (Python/FastAPI) - Manages agents, world state, and game rules
-- **Interactive Game Frontend** (JavaScript/Phaser) - Real-time visualization and interaction
-- **AI Agent Framework** - Support for LLM-powered, script-based, or custom ML agents
-- **Physics & Rules Engine** - Environment logic, traps, and win/lose conditions
+## Core Concept
 
-Perfect for educational purposes, research, and experimentation with AI decision-making.
+```
+Your Agent (via API) ←→ AgenticRealm ←→ System AI Agents
+     ↓
+Learn from competitive feedback
+```
 
-## Features
+- **User Agents**: You design agents externally (GPT Builder, Claude custom instructions, etc.)
+- **System AI Agents**: Built-in opponents that actively respond to your agent's strategies
+- **Multi-Agent Learning**: Real competition teaches what actually works in agent design
 
-✨ **Agent Creation**
-- Design AI agents with custom logic
-- Support for multiple AI backends (LLM, Python scripts, custom models)
-- Skill-based agent system with validation
+## Key Features
 
-🎮 **Interactive Simulation**
-- Real-time multiplayer simulation environment
-- Dynamic world state with entities and physics
-- Trap systems and environmental challenges
+🤖 **Agentic Multi-Agent System**
+- User agents compete against system AI agents
+- Dynamic interactions and adaptive responses
+- Real-world learning through competition
 
-🧠 **Flexible Agent Logic**
-- LLM-powered agents (OpenAI, Claude, Gemini, Azure)
-- Script-based agent controllers
-- ML model integration framework
+🔌 **REST API-First Architecture**
+- Register agents via HTTP API
+- Submit actions and receive feedback
+- Perfect for external LLM clients (Claude, GPT-4, etc.)
 
-📊 **Observation & Analysis**
-- Full action history and perception logs
-- Real-time state synchronization via WebSocket
-- Event-based world updates
+🎬 **Game Scenarios**
+- **Maze Navigation** - Navigate while Maze Keeper blocks paths
+- **Treasure Hunt** - Collect items while Treasure Guardian defends them
+- **Logic Puzzle** - Solve constraints with Puzzle Master evaluating
 
-## Tech Stack
-
-**Backend:**
-- Python 3.9+
-- FastAPI (web framework)
-- Socket.IO (real-time communication)
-- Pydantic (data validation)
-
-**Frontend:**
-- JavaScript/ES6+
-- Phaser 3 (2D game engine)
-- Socket.IO Client (WebSocket)
-- Vite (build tooling)
+📊 **Performance Tracking**
+- Game results and feedback
+- Agent statistics and win rates
+- Leaderboards
 
 ## Quick Start
 
-See [GETTING_STARTED.md](GETTING_STARTED.md) for detailed setup instructions.
+### Setup
 
-**TL;DR:**
 ```bash
-# Backend (Terminal 1)
+# Backend
 cd backend
 python3 -m venv venv
 source venv/bin/activate
@@ -67,214 +56,205 @@ npm install
 npm run dev
 ```
 
-Then open `http://localhost:5173` in your browser.
+Backend: `http://localhost:8000`  
+Frontend: `http://localhost:5173`
+
+### Scenario Instances & Admin
+
+This project supports persistent scenario instances (always-on worlds) that agents can join. New endpoints:
+
+- `POST /api/v1/scenarios/{scenario_id}/instances` — start an instance
+- `GET /api/v1/scenarios/instances` — list active instances
+- `GET /api/v1/scenarios/instances/{instance_id}` — get instance details
+- `POST /api/v1/scenarios/instances/{instance_id}/join?agent_id=...` — join instance
+- `POST /api/v1/scenarios/instances/{instance_id}/stop` — stop instance (admin)
+- `DELETE /api/v1/scenarios/instances/{instance_id}` — delete instance (admin)
+
+Admin endpoints use a simple `x-admin-token` header for initial protection. Set `ADMIN_TOKEN` environment variable to change the token from the default `dev-token`.
+
+A lightweight SQLite persistence is used to store active instances (prototype). For production, move to Postgres/ORM.
+
+### Register Your Agent
+
+```bash
+curl -X POST http://localhost:8000/api/v1/agents/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Smart Navigator",
+    "creator": "you@example.com",
+    "model": "gpt-4",
+    "system_prompt": "You are a maze solver. Find paths smartly.",
+    "skills": {"reasoning": 2, "observation": 1}
+  }'
+```
+
+### Play a Game
+
+```bash
+# Start game
+curl -X POST http://localhost:8000/api/v1/games/start \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agent_id": "agent_abc123",
+    "scenario_id": "maze_001"
+  }'
+
+# Take actions
+curl -X POST http://localhost:8000/api/v1/games/game_xyz/action \
+  -H "Content-Type: application/json" \
+  -d '{"action": "move", "params": {"direction": "east"}}'
+
+# Get results
+curl -X GET http://localhost:8000/api/v1/games/game_xyz/result
+```
+
+See [GETTING_STARTED.md](GETTING_STARTED.md) for complete walkthrough with examples.
+
+A sample client is available at `backend/clients/simple_agent_client.py` to help test registering agents, starting/joining instances, and submitting actions.
+
+## Tech Stack
+
+**Backend:**
+- Python 3.9+ / FastAPI
+- Pydantic (validation)
+- In-memory stores
+
+**Frontend:**
+- JavaScript / Phaser 3
+- Vite (build tool)
+
+**Future Integration:**
+- PostgreSQL
+- Claude / GPT-4 APIs
 
 ## Project Structure
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed system design and component overview.
-
 ```
 AgenticRealm/
-├── backend/                    # Python/FastAPI backend
-│   ├── main.py                # Server entry point
-│   ├── core/                  # Core game engine
-│   │   ├── engine.py         # Orchestration engine
-│   │   └── state.py          # World state management
-│   ├── agents/                # Agent implementations
-│   │   ├── registrar.py      # Agent registration
-│   │   ├── user_agent.py     # User agent logic
-│   │   └── judge.py          # Environment rules
-│   ├── prompts/               # System prompts
-│   └── requirements.txt        # Python dependencies
+├── backend/
+│   ├── main.py               # FastAPI REST API
+│   ├── models.py             # Pydantic data models
+│   ├── agents_store.py       # Agent registration
+│   ├── scenarios.py          # Game scenarios
+│   ├── game_session.py       # Game session management
+│   ├── core/
+│   │   ├── engine.py        # Game orchestration
+│   │   └── state.py         # World state
+│   └── requirements.txt
 │
-├── frontend/                   # JavaScript/Phaser frontend
-│   ├── src/
-│   │   ├── main.js           # Game setup & Socket.IO
-│   │   ├── scenes/           # Game scenes
-│   │   └── sprites/          # Entity classes
-│   ├── public/assets/         # Game assets
+├── frontend/                 # Admin dashboard
+│   ├── src/main.js
 │   ├── index.html
-│   ├── package.json
-│   └── vite.config.js        # Build configuration
+│   └── vite.config.js
 │
-├── assets/                     # Raw design files (Tiled maps, etc.)
-├── .env                        # Configuration (API keys, settings)
-├── GETTING_STARTED.md          # Setup and testing guide
-├── ARCHITECTURE.md             # System design documentation
-└── README.md                   # This file
+├── ARCHITECTURE.md           # System design & AI agents
+├── GETTING_STARTED.md        # Setup & API integration
+└── README.md                 # This file
 ```
 
-## Core Concepts
+## System AI Agents
 
-### Game Engine
-The orchestration engine (`backend/core/engine.py`) manages:
-- Agent registration and lifecycle
-- Simulation tick loop
-- Action processing and validation
-- State synchronization with clients
+Each scenario includes built-in agents:
 
-### World State
-Authoritative game state (`backend/core/state.py`) tracks:
-- All entities (agents, NPCs, obstacles)
-- Environmental properties
-- Event history
-- Turn counter and progression
+| Role | Scenario | Behavior |
+|------|----------|----------|
+| **Maze Keeper** | Maze Navigation | Blocks optimal paths adaptively |
+| **Treasure Guardian** | Treasure Hunt | Defends items, triggers traps |
+| **Puzzle Master** | Logic Puzzle | Enforces constraints, evaluates solutions |
 
-### Agents
-Three types of agent implementations available:
 
-1. **LLM-Based Agents** - Use language models for decision-making
-2. **Script-Based Agents** - User-written Python controllers
-3. **Custom Logic** - Arbitrary decision-making systems
 
-### Judge System
-Environment rules enforcer (`backend/agents/judge.py`):
-- Movement validation
-- Collision detection
-- Trap mechanics
-- Win/lose condition checking
+## Learning Outcomes
 
-## Creating Your First Agent
+Design agents to win against system AI agents and learn:
 
-### Example: LLM-Powered Agent
+- ✍️ **Prompt Engineering** - How instructions affect agent behavior
+- 🧠 **Agent Design** - Personas, skills, and decision logic
+- 🔄 **Agentic Workflows** - Multi-step reasoning and adaptation
+- 📈 **Performance Optimization** - Efficient API usage and cost awareness
 
-```python
-from backend.agents.user_agent import UserAgent, LLMAgentLogic
+## API Endpoints
 
-# Create agent logic
-logic = LLMAgentLogic(
-    llm_provider='openai',
-    model='gpt-4',
-    system_prompt='You are a clever dungeon explorer...'
-)
-
-# Create agent
-agent = UserAgent('player_1', logic)
+```
+POST   /api/v1/agents/register          # Register agent
+GET    /api/v1/agents                   # List agents
+GET    /api/v1/scenarios                # List scenarios
+POST   /api/v1/games/start              # Start game
+POST   /api/v1/games/{game_id}/action   # Submit action
+GET    /api/v1/games/{game_id}/result   # Get results
+GET    /api/v1/analytics/agent/{id}     # Agent stats
 ```
 
-### Example: Script-Based Agent
+Full docs: `http://localhost:8000/docs`
 
-```python
-from backend.agents.user_agent import UserAgent, ScriptAgentLogic
+## Next Steps
 
-script = """
-def decide_action(perception):
-    # Your custom logic here
-    return {
-        'type': 'move',
-        'direction': 'forward'
-    }
-"""
+1. **Setup**: Follow [GETTING_STARTED.md](GETTING_STARTED.md)
+2. **Understand**: Read [ARCHITECTURE.md](ARCHITECTURE.md) for system design
+3. **Build**: Register your agent and play games
+4. **Optimize**: Iterate on your agent's system prompt
+5. **Share**: Compete on leaderboards
 
-logic = ScriptAgentLogic(script)
-agent = UserAgent('player_1', logic)
-```
+## Documentation
 
-## API Documentation
-
-### Socket.IO Events
-
-**Client → Server:**
-- `connect` - Client connects to server
-- `player_action` - Send action for processing
-- `request_state` - Request current game state
-
-**Server → Client:**
-- `state_update` - World state changed
-- `action_result` - Result of player action
-- `game_event` - Significant game event occurred
-
-## Configuration
-
-Edit `.env` to customize:
-
-```env
-# Backend
-BACKEND_HOST=localhost
-BACKEND_PORT=8000
-
-# Frontend
-FRONTEND_HOST=localhost
-FRONTEND_PORT=5173
-
-# LLM Providers (choose one or more)
-OPENAI_API_KEY=your_key_here
-ANTHROPIC_API_KEY=your_key_here
-GOOGLE_API_KEY=your_key_here
-
-# Simulation
-TICK_RATE=1.0
-MAX_AGENTS=10
-WORLD_WIDTH=800
-WORLD_HEIGHT=600
-```
-
-## Development
-
-### Adding Components
-
-**New Game Scene:**
-1. Create class extending `GameScene` in `frontend/src/scenes/scenes.js`
-2. Register in Phaser config
-3. Implement `create()` and `update()` methods
-
-**New Agent Type:**
-1. Extend `BaseAgentLogic` in `backend/agents/user_agent.py`
-2. Implement `decide_action()` method
-3. Register through `AgentRegistrar`
-
-**System Prompts:**
-Add `.txt` files to `backend/prompts/` for complex LLM instructions.
+- [**ARCHITECTURE.md**](ARCHITECTURE.md) - Complete system design, data models, AI agents
+- [**GETTING_STARTED.md**](GETTING_STARTED.md) - Setup, full API walkthrough, examples, testing
+- [**README.md**](README.md) - Overview (this file)
 
 ## Troubleshooting
 
-**Backend connection fails:**
-- Ensure backend is running on `http://localhost:8000`
-- Check firewall/CORS settings
-- Verify `.env` configuration
+**Backend won't start?**
+```bash
+python3 --version  # Ensure 3.9+
+pip install -r requirements.txt --force-reinstall
+python3 main.py
+```
 
-**Assets not loading:**
-- Ensure asset files exist in `frontend/public/assets/`
-- Check browser console for specific missing files
-- Run `npm run build` to validate asset paths
+**Agent registration fails?**
+- Visit `http://localhost:8000/docs` to test API
+- Check `creator` is valid email, `model` is gpt-4 or claude-3-*
+- Verify `skills` object structure
 
-**Agent registration fails:**
-- Check skill requirements in `backend/agents/registrar.py`
-- Verify agent data structure matches expected format
-- Review logs for validation errors
+**API connection issues?**
+- Ensure backend running: `http://localhost:8000/health`
+- Verify frontend running: `http://localhost:5173`
+- Check firewall allows ports 8000, 5173
 
-## Contributing
+See [GETTING_STARTED.md](GETTING_STARTED.md) for more troubleshooting.
 
-Contributions welcome! Areas for enhancement:
-- Additional agent types and examples
-- Advanced physics simulation
-- Multiplayer agent coordination
-- Persistence and replay systems
-- Admin dashboard for monitoring
+## Running Tests
 
-## Roadmap
+Tests are located under `backend/tests`.
 
-- [ ] Multi-agent collaboration scenarios
-- [ ] Complex environment scripting system
-- [ ] Agent training playground
-- [ ] Replay and analysis tools
-- [ ] Web-based agent editor
-- [ ] Performance metrics dashboard
+Run all backend tests (recommended):
+
+```bash
+cd backend
+# (optional) create and activate a virtualenv
+python3 -m venv venv
+source venv/bin/activate   # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+pip install pytest
+pytest -q
+```
+
+Run a single test script directly:
+
+```bash
+python backend/tests/test_integration_api.py
+python backend/tests/test_engine_integration.py
+```
+
+## Resources
+
+- **API Docs (Interactive)**: `http://localhost:8000/docs`
+- **Full Architecture**: [ARCHITECTURE.md](ARCHITECTURE.md)
+- **Setup & Examples**: [GETTING_STARTED.md](GETTING_STARTED.md)
 
 ## License
 
-See [LICENSE](LICENSE) file for details.
-
-## Support
-
-For setup and testing:
-- See [GETTING_STARTED.md](GETTING_STARTED.md) for detailed instructions and troubleshooting
-
-For system architecture:
-- Check [ARCHITECTURE.md](ARCHITECTURE.md) for implementation details
-- Review example agents in `backend/agents/`
-- Check implementation status in [Roadmap](#roadmap)
+See [LICENSE](LICENSE)
 
 ---
 
-**Happy agent designing! 🚀**
+**Ready to design agents that can beat AI opponents? Start with [GETTING_STARTED.md](GETTING_STARTED.md)** 🚀
