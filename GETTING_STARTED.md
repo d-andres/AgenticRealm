@@ -538,3 +538,196 @@ python backend/tests/test_engine_integration.py
 ```
 
 Tests are intended as examples and may require the backend server to be running for API integration checks.
+
+---
+
+## Getting Started with AI Agents 🤖
+
+AgenticRealm now includes a **live AI agent framework** where external AI agents (GPT, Claude, etc.) can stay connected and actively manage system components in real-time.
+
+### Quick Start (5 minutes)
+
+#### 1. Ensure Backend is Running
+```bash
+cd backend
+python main.py
+```
+
+You should see:
+```
+[Main] Initializing AI agent pool...
+[Main] Agent pool ready. Pool ID: 123456789
+```
+
+#### 2. Set Your API Key
+```bash
+# Linux/Mac:
+export OPENAI_API_KEY="sk-..."
+
+# Windows PowerShell:
+$env:OPENAI_API_KEY="sk-..."
+```
+
+#### 3. Run the Example Client
+```bash
+python backend/clients/ai_agent_example.py
+```
+
+This will:
+- Register a GPT Scenario Generator agent
+- Register a GPT NPC Admin agent  
+- Request scenario generation
+- Request NPC interactions
+- Show the full AI agent system in action
+
+### What Just Happened?
+
+You now have:
+- ✅ Live AI agents connected to your backend
+- ✅ Scenario generation powered by GPT-4
+- ✅ NPC behaviors dynamically created by AI
+- ✅ Agents maintaining conversation history with NPCs
+
+### API Endpoints
+
+All AI agent management endpoints are available at `/api/v1/ai-agents/`:
+
+```bash
+# Check agent pool health
+curl http://localhost:8000/api/v1/ai-agents/health
+
+# List registered agents
+curl http://localhost:8000/api/v1/ai-agents/list
+
+# Register a GPT agent
+curl -X POST http://localhost:8000/api/v1/ai-agents/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agent_name": "gpt-scenario",
+    "agent_role": "scenario_generator",
+    "agent_type": "gpt",
+    "config": {
+      "api_key": "sk-...",
+      "model": "gpt-4"
+    }
+  }'
+
+# Request scenario generation
+curl -X POST http://localhost:8000/api/v1/ai-agents/request/scenario_generator/generate_stores \
+  -H "Content-Type: application/json" \
+  -d '{
+    "context": {
+      "num_stores": 5,
+      "themes": ["bustling", "market"]
+    }
+  }'
+```
+
+### Use in Your Game Code
+
+```python
+from ai_agents.agent_pool import get_agent_pool
+
+async def generate_unique_scenario():
+    pool = get_agent_pool()
+    
+    # Request AI to generate stores
+    response = await pool.request(
+        role="scenario_generator",
+        action="generate_stores",
+        context={
+            "num_stores": 5,
+            "themes": ["urban_market", "bustling"],
+            "npc_per_store": 2
+        }
+    )
+    
+    if response.success:
+        stores = response.result["stores"]
+        # Use AI-generated stores in your game
+        return stores
+
+async def get_npc_response(npc, player_message):
+    pool = get_agent_pool()
+    
+    # Request NPC response via AI
+    response = await pool.request(
+        role="npc_admin",
+        action="npc_interaction",
+        context={
+            "npc_id": npc.id,
+            "npc_data": {
+                "name": npc.name,
+                "job": npc.job,
+                "personality": npc.personality
+            },
+            "player_message": player_message
+        }
+    )
+    
+    if response.success:
+        return response.result["response"]
+```
+
+### Create Custom Agent
+
+To add your own AI provider (Claude, Copilot, etc.):
+
+```python
+from ai_agents.interfaces import AIAgent, AIAgentRequest, AIAgentResponse, AgentRole
+
+class MyAgent(AIAgent):
+    async def connect(self):
+        # Connect to your AI provider
+        self.is_connected = True
+    
+    async def handle_request(self, request: AIAgentRequest):
+        # Process request and call your AI provider
+        result = await self.my_ai_provider.call(request.context)
+        
+        return AIAgentResponse(
+            request_id=request.request_id,
+            agent_role=self.role,
+            success=True,
+            result=result
+        )
+```
+
+Then register it via the API:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/ai-agents/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agent_name": "my-custom-agent",
+    "agent_role": "npc_admin",
+    "agent_type": "custom",
+    "config": {
+      "api_key": "...",
+      "custom_setting": "value"
+    }
+  }'
+```
+
+### Documentation
+
+For complete details, see:
+- `backend/ai_agents/README.md` - Full framework guide with API reference and examples
+- `backend/clients/ai_agent_example.py` - Complete working example
+
+### Agent Roles
+
+| Role | Purpose | Example |
+|------|---------|---------|
+| `scenario_generator` | Create unique scenarios | Generate stores, NPCs, items |
+| `npc_admin` | Manage NPC behavior | NPC conversations, decisions |
+| `game_master` | Run the game | Validate actions, adjudicate conflicts |
+| `judge` | Check rules | Is this action allowed? |
+| `storyteller` | Narrate events | Describe scenes, set atmosphere |
+
+### Support
+
+- **Framework Guide**: `backend/ai_agents/README.md` (includes API reference)
+- **Example Code**: `backend/clients/ai_agent_example.py`
+
+Your AI agent framework is ready to power unique, dynamic game worlds! 🚀
