@@ -1,0 +1,80 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>AgenticRealm Presentation</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 16px; }
+    #feed { max-width: 900px; }
+    .entry { border-bottom: 1px solid #eee; padding: 8px 0; }
+    .meta { color: #666; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h1>AgenticRealm — Live Feed</h1>
+  <p>Paste a game id to follow or leave empty to watch recent condensed prompts.</p>
+  <input id="gameId" placeholder="Optional game id" style="width:300px" />
+  <button id="follow">Follow</button>
+  <div id="feed"></div>
+
+  <script>
+    const feedEl = document.getElementById('feed');
+    const followBtn = document.getElementById('follow');
+    let followGame = null;
+
+    followBtn.onclick = () => {
+      followGame = document.getElementById('gameId').value.trim() || null;
+      feedEl.innerHTML = '';
+    }
+
+    async function fetchFeed() {
+      try {
+        const res = await fetch('/api/v1/feed?limit=25');
+        const data = await res.json();
+        renderFeed(data.entries || []);
+
+        // If following a game, also fetch its state to overlay
+        if (followGame) {
+          const s = await fetch(`/api/v1/games/${followGame}`);
+          if (s.ok) {
+            const gs = await s.json();
+            renderGameState(gs);
+          }
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    function renderFeed(entries) {
+      feedEl.innerHTML = entries.map(e => {
+        const when = new Date(e.timestamp).toLocaleTimeString();
+        return `
+          <div class="entry">
+            <div><strong>${e.agent_id}</strong> — <span class="meta">${when} • turn ${e.turn} • game ${e.game_id}</span></div>
+            <div>${escapeHtml(e.summary)}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderGameState(gs) {
+      // Simple overlay showing top-level entities and turn
+      const state = gs.state || {};
+      const turn = state.turn || gs.turn || 0;
+      const entities = state.entities || {};
+      const keys = Object.keys(entities).slice(0,6).map(k => `${entities[k].type}:${entities[k].properties && entities[k].properties.name ? entities[k].properties.name : entities[k].id}`);
+      const div = document.createElement('div');
+      div.style.marginTop = '12px';
+      div.innerHTML = `<div class="entry"><div><strong>Game ${gs.game_id}</strong> <span class="meta">turn ${turn}</span></div><div>${keys.join(' • ')}</div></div>`;
+      feedEl.prepend(div);
+    }
+
+    function escapeHtml(s){ return String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+
+    // Poll every 2s
+    fetchFeed();
+    setInterval(fetchFeed, 2000);
+  </script>
+</body>
+</html>

@@ -5,24 +5,33 @@
     <meta name='viewport' content='width=device-width, initial-scale=1'>
     <title>AgenticRealm</title>
     <style>
-        body {
+        * {
             margin: 0;
             padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
             background-color: #000000;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            color: #ffffff;
         }
+        
         #app {
             display: flex;
+            flex-direction: column;
             justify-content: center;
             align-items: center;
             height: 100vh;
+            gap: 20px;
         }
+        
         .status {
             position: absolute;
             top: 20px;
             right: 20px;
             padding: 15px;
-            background-color: rgba(0, 0, 0, 0.8);
+            background-color: rgba(0, 0, 0, 0.9);
             color: #00ff00;
             font-family: 'Courier New', monospace;
             font-size: 12px;
@@ -30,22 +39,267 @@
             border-radius: 4px;
             max-width: 300px;
         }
+        
         .status-connected {
             color: #00ff00;
         }
+        
         .status-disconnected {
             color: #ff0000;
+        }
+        
+        .title {
+            font-size: 48px;
+            font-weight: bold;
+            color: #00ff00;
+        }
+        
+        .agent-form {
+            background-color: #1a1a2e;
+            padding: 30px;
+            border-radius: 8px;
+            border: 2px solid #00ff00;
+            width: 400px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            font-size: 14px;
+            margin-bottom: 8px;
+            color: #00ff00;
+        }
+        
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 10px;
+            background-color: #0f0f1e;
+            border: 1px solid #00ff00;
+            color: #ffffff;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #00ff00;
+            box-shadow: 0 0 10px rgba(0, 255, 0, 0.3);
+        }
+        
+        .skills-group {
+            background-color: #0f0f1e;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        
+        .skill-input {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+            align-items: center;
+        }
+        
+        .skill-input label {
+            min-width: 100px;
+            margin: 0;
+        }
+        
+        .skill-input input {
+            width: 80px;
+            margin: 0;
+        }
+        
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: #00ff00;
+            color: #000000;
+            border: none;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        button:hover {
+            background-color: #00cc00;
+            transform: scale(1.02);
+        }
+        
+        button:active {
+            transform: scale(0.98);
+        }
+        
+        .game-controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        
+        .game-controls button {
+            flex: 1;
+            padding: 10px;
+        }
+        
+        .message {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            text-align: center;
+            min-width: 400px;
+        }
+        
+        .message.success {
+            background-color: #00ff00;
+            color: #000000;
+        }
+        
+        .message.error {
+            background-color: #ff0000;
+            color: #ffffff;
+        }
+        
+        .agent-list {
+            color: #00ff00;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            margin-top: 20px;
+            width: 400px;
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #00ff00;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        
+        .agent-item {
+            padding: 5px 0;
+            border-bottom: 1px solid #00ff00;
         }
     </style>
 </head>
 <body>
-    <div id='app'></div>
+    <div id='app'>
+        <div class='title'>AgenticRealm</div>
+        
+        <div id='message' style='display: none;' class='message'></div>
+        
+        <div class='agent-form'>
+            <h2 style='margin-bottom: 20px; text-align: center;'>Create Your Agent</h2>
+            
+            <div class='form-group'>
+                <label>Agent Name:</label>
+                <input type='text' id='agentName' placeholder='e.g., CleverBot' value='TestAgent'>
+            </div>
+            
+            <div class='form-group'>
+                <label>Persona:</label>
+                <input type='text' id='agentPersona' placeholder='e.g., clever explorer' value='curious investigator'>
+            </div>
+            
+            <div class='form-group'>
+                <label>Skills:</label>
+                <div class='skills-group'>
+                    <div class='skill-input'>
+                        <label>Reasoning:</label>
+                        <input type='number' id='skillReasoning' min='1' max='5' value='2'>
+                    </div>
+                    <div class='skill-input'>
+                        <label>Observation:</label>
+                        <input type='number' id='skillObservation' min='1' max='5' value='2'>
+                    </div>
+                </div>
+            </div>
+            
+            <button onclick='createAgentClicked()'>Create Agent</button>
+            
+            <div class='game-controls'>
+                <button onclick='startGameClicked()'>Start Game</button>
+                <button onclick='stopGameClicked()'>Stop Game</button>
+            </div>
+        </div>
+        
+        <div class='agent-list'>
+            <div style='text-align: center; color: #00ff00; padding: 10px;'>Active Agents:</div>
+            <div id='agentListContainer'></div>
+        </div>
+    </div>
+    
     <div class='status'>
         <div>AgenticRealm Client</div>
         <div id='connection-status' class='status-disconnected'>Connecting...</div>
+        <div id='turn-info'>Turn: 0</div>
         <div id='server-info'>Server: localhost:8000</div>
     </div>
     
-    <script type='module' src='./src/main.js'></script>
+    <script type='module'>
+        import { createAgent, startGame, stopGame, requestState, socket, gameState } from './src/main.js';
+        
+        // Make functions globally available
+        window.createAgentClicked = function() {
+            const name = document.getElementById('agentName').value || 'UnnamedAgent';
+            const persona = document.getElementById('agentPersona').value || 'generic';
+            const skills = {
+                reasoning: Math.max(1, parseInt(document.getElementById('skillReasoning').value) || 1),
+                observation: Math.max(1, parseInt(document.getElementById('skillObservation').value) || 1)
+            };
+            
+            console.log('Creating agent:', { name, persona, skills });
+            createAgent(name, persona, skills);
+        };
+        
+        window.startGameClicked = function() {
+            console.log('Starting game...');
+            startGame();
+        };
+        
+        window.stopGameClicked = function() {
+            console.log('Stopping game...');
+            stopGame();
+        };
+        
+        // Update turn info
+        setInterval(() => {
+            const turnInfo = document.getElementById('turn-info');
+            if (turnInfo && gameState) {
+                turnInfo.textContent = `Turn: ${gameState.turn || 0}`;
+            }
+            
+            // Update agent list
+            const agentListContainer = document.getElementById('agentListContainer');
+            if (agentListContainer && gameState && gameState.entities) {
+                const agents = Object.values(gameState.entities).filter(e => e.type === 'agent');
+                agentListContainer.innerHTML = agents.map(agent => 
+                    `<div class='agent-item'>${agent.properties.name} (health: ${agent.properties.health})</div>`
+                ).join('') || '<div style="opacity: 0.5;">No agents yet</div>';
+            }
+        }, 500);
+        
+        // Listen for socket events to show messages
+        socket.on('agent_created', (data) => {
+            showMessage(`Agent "${data.name}" created!`, 'success');
+        });
+        
+        socket.on('error', (data) => {
+            showMessage(`Error: ${data.message}`, 'error');
+        });
+        
+        function showMessage(text, type) {
+            const messageEl = document.getElementById('message');
+            messageEl.textContent = text;
+            messageEl.className = `message ${type}`;
+            messageEl.style.display = 'block';
+            setTimeout(() => {
+                messageEl.style.display = 'none';
+            }, 3000);
+        }
+    </script>
 </body>
 </html>
