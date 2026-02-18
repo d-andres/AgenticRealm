@@ -22,6 +22,8 @@ from scenario_instances import scenario_instance_manager
 from core.engine import GameEngine
 import os
 from feed_store import feed_store
+from ai_agents.agent_pool import get_agent_pool, shutdown_agent_pool
+from routes.ai_agent_routes import router as ai_agent_router
 
 # Admin token for management endpoints (simple initial protection)
 ADMIN_TOKEN = os.getenv('ADMIN_TOKEN', 'dev-token')
@@ -44,6 +46,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ==================== AI AGENT ROUTES ====================
+# Include routes for AI agent management and request routing
+app.include_router(ai_agent_router, prefix="/api/v1/ai-agents", tags=["AI Agents"])
 
 # ==================== HEALTH & INFO ====================
 
@@ -143,6 +149,11 @@ engine = GameEngine(tick_rate=float(os.getenv('TICK_RATE', '1.0')))
 
 @app.on_event('startup')
 async def startup_event():
+    # Initialize agent pool (ready to accept AI agent registrations)
+    print("[Main] Initializing AI agent pool...")
+    agent_pool = await get_agent_pool()
+    print(f"[Main] Agent pool ready. Pool ID: {id(agent_pool)}")
+    
     # Start the continuous simulation loop
     try:
         await engine.start()
@@ -152,6 +163,15 @@ async def startup_event():
 
 @app.on_event('shutdown')
 async def shutdown_event():
+    # Shutdown agent pool (disconnect all registered agents)
+    print("[Main] Shutting down agent pool...")
+    try:
+        await shutdown_agent_pool()
+        print("[Main] Agent pool shutdown complete")
+    except Exception as e:
+        print(f"[Main] Failed to shutdown agent pool: {e}")
+    
+    # Stop the simulation engine
     try:
         await engine.stop()
     except Exception as e:
