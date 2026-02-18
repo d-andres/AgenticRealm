@@ -1,9 +1,16 @@
+"""
+SQLite persistence helpers for scenario instances.
+
+All tables are created lazily via `init_db()`.  The database file lives
+alongside the backend package as `agentic_realm.db`.
+"""
+
 import sqlite3
 import json
 import os
 from datetime import datetime
 
-DB_PATH = os.path.join(os.path.dirname(__file__), 'agentic_realm.db')
+DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'agentic_realm.db')
 
 
 def _get_conn():
@@ -45,7 +52,7 @@ def save_instance_dict(instance_dict: dict):
         json.dumps(instance_dict.get('players') or []),
         instance_dict.get('created_at', now),
         now,
-        1 if instance_dict.get('active', True) else 0
+        1 if instance_dict.get('active', True) else 0,
     ))
     conn.commit()
     conn.close()
@@ -67,7 +74,7 @@ def load_instance_dict(instance_id: str):
         'players': json.loads(row['players_json'] or '[]'),
         'created_at': row['created_at'],
         'updated_at': row['updated_at'],
-        'active': bool(row['active'])
+        'active': bool(row['active']),
     }
 
 
@@ -81,18 +88,18 @@ def list_instance_dicts(active_only=True):
         cur.execute('SELECT * FROM instances')
     rows = cur.fetchall()
     conn.close()
-    out = []
-    for row in rows:
-        out.append({
+    return [
+        {
             'instance_id': row['instance_id'],
             'scenario_id': row['scenario_id'],
             'state': json.loads(row['state_json'] or '{}'),
             'players': json.loads(row['players_json'] or '[]'),
             'created_at': row['created_at'],
             'updated_at': row['updated_at'],
-            'active': bool(row['active'])
-        })
-    return out
+            'active': bool(row['active']),
+        }
+        for row in rows
+    ]
 
 
 def delete_instance(instance_id: str):
@@ -109,6 +116,9 @@ def mark_instance_inactive(instance_id: str):
     conn = _get_conn()
     cur = conn.cursor()
     now = datetime.now().isoformat()
-    cur.execute('UPDATE instances SET active = 0, updated_at = ? WHERE instance_id = ?', (now, instance_id))
+    cur.execute(
+        'UPDATE instances SET active = 0, updated_at = ? WHERE instance_id = ?',
+        (now, instance_id),
+    )
     conn.commit()
     conn.close()

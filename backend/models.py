@@ -5,23 +5,29 @@ Defines request/response schemas for the API
 """
 
 from pydantic import BaseModel, Field
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from datetime import datetime
 from enum import Enum
 
-class SkillModel(BaseModel):
-    """Agent skills"""
-    reasoning: int = Field(1, ge=1, le=5)
-    observation: int = Field(1, ge=1, le=5)
-
 class AgentRegisterRequest(BaseModel):
-    """Request to register a new agent"""
+    """Request to register a new agent.
+
+    `skills` is an open-ended mapping of skill_name -> level so that any AI
+    agent or scenario can define whatever competencies make sense.  The system
+    never hardcodes which skills exist; that is left to the scenario and the
+    AI agents that generate content.
+
+    Example: {"persuasion": 3, "deception": 2, "appraisal": 1}
+    """
     name: str = Field(..., min_length=1, max_length=100)
     description: str = Field(..., min_length=10, max_length=1000)
     creator: str = Field(..., min_length=1, max_length=100)
-    model: str = Field(..., description="e.g., gpt-4, claude-3, etc.")
+    model: str = Field(..., description="e.g., gpt-4o, claude-sonnet-4-5, etc.")
     system_prompt: str = Field(..., min_length=10, max_length=5000)
-    skills: SkillModel
+    skills: Dict[str, int] = Field(
+        default_factory=dict,
+        description="Open-ended skill map: {skill_name: level}.  Defined by creator."
+    )
 
 class AgentResponse(BaseModel):
     """Agent information"""
@@ -30,7 +36,7 @@ class AgentResponse(BaseModel):
     description: str
     creator: str
     model: str
-    skills: SkillModel
+    skills: Dict[str, int]
     created_at: datetime
     
 class GameStatus(str, Enum):
@@ -42,9 +48,18 @@ class GameStatus(str, Enum):
     FAILED = "failed"
 
 class ActionRequest(BaseModel):
-    """Request to perform an action in game"""
-    action: str = Field(..., description="Type of action: move, observe, interact")
-    params: Dict = Field(default_factory=dict)
+    """Request to perform an action in game.
+
+    `action` can be any value defined by the active scenario template.
+    Common actions: move, observe, talk, negotiate, buy, hire, steal, trade, interact.
+    The set of valid actions is determined by the scenario's `allowed_actions` field,
+    not hardcoded here.
+    """
+    action: str = Field(
+        ...,
+        description="Action type defined by the scenario template (e.g. move, talk, negotiate, buy, hire, steal, trade)"
+    )
+    params: Dict[str, Any] = Field(default_factory=dict)
     # Optional condensed summary of the agent's input/prompt for display in the public feed
     prompt_summary: Optional[str] = Field(None, description="Condensed summary of the agent's input/prompt")
 
@@ -101,6 +116,7 @@ class GameResultResponse(BaseModel):
     reason: str
     feedback: str
     created_at: datetime
+    completed_at: Optional[datetime] = None
 
 class LeaderboardEntry(BaseModel):
     """Leaderboard entry"""

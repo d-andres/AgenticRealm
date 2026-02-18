@@ -1,179 +1,170 @@
 """
-Integration Test - Game Engine & Agent Creation
+Integration Test - Core systems: engine, state, agent store, game session.
 
-Moved from top-level test file to `backend/tests` for clarity.
+Tests the current architecture (provider-agnostic, entity-type-based routing).
+Run from backend/:  python -m tests.test_engine_integration
 """
 
 import asyncio
+import sys, os
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
 from core.state import GameState, Entity
 from core.engine import GameEngine
-from agents.registrar import AgentRegistrar
-from agents.judge import Judge, Trap
-import json
+from store.agent_store import AgentStore
+from scenarios.templates import ScenarioManager
+import pytest
+from game_session import GameSession, GameSessionManager
 
+
+@pytest.mark.asyncio
 async def test_integration():
-    """Test integration: Game Loop & Agent Creation"""
+    """Smoke-test all core systems together."""
 
-    print("\n" + "="*60)
-    print("🎮 AgenticRealm Integration Test")
-    print("="*60 + "\n")
-    
-    # Initialize systems
-    state = GameState()
-    engine = GameEngine(tick_rate=0.5)  # 0.5 seconds per tick for testing
-    registrar = AgentRegistrar()
-    judge = Judge()
-    
-    print("✓ Systems initialized\n")
-    
-    # Test 1: Register agents
-    print("TEST 1: Agent Registration")
+    print("\n" + "=" * 60)
+    print("AgenticRealm Integration Test")
+    print("=" * 60 + "\n")
+
+    # ------------------------------------------------------------------
+    # Test 1 — Agent Store
+    # ------------------------------------------------------------------
+    print("TEST 1: Agent Registration (AgentStore)")
     print("-" * 40)
-    
-    agent1 = registrar.register_agent('user_1_agent', {
+
+    store = AgentStore()
+    agent1 = store.register({
         'name': 'CleverBot',
-        'skills': {'reasoning': 2, 'observation': 1}
+        'description': 'A test agent',
+        'creator': 'tester',
+        'model': 'gpt-4o',
+        'system_prompt': 'You are a test agent.',
+        'skills': {'reasoning': 2, 'observation': 1},
     })
-    
-    agent2 = registrar.register_agent('user_2_agent', {
+    agent2 = store.register({
         'name': 'ObserverBot',
-        'skills': {'reasoning': 1, 'observation': 3}
+        'description': 'Another test agent',
+        'creator': 'tester',
+        'model': 'claude-3',
+        'system_prompt': 'You are an observer.',
+        'skills': {'observation': 3, 'stealth': 2},
     })
-    
-    print(f"✓ Registered {len(registrar.agents)} agents\n")
-    
-    # Test 2: Add entities to game state
-    print("TEST 2: Entity Management")
+
+    assert store.agent_exists(agent1.agent_id)
+    assert store.agent_exists(agent2.agent_id)
+    assert not store.agent_exists('nonexistent-id')
+    print(f"✓ Registered {len(store.agents)} agents")
+    print(f"  CleverBot skills: {agent1.skills}")
+    print(f"  ObserverBot skills: {agent2.skills}\n")
+
+    # ------------------------------------------------------------------
+    # Test 2 — Game State & Entity Management
+    # ------------------------------------------------------------------
+    print("TEST 2: Entity Management (GameState)")
     print("-" * 40)
-    
-    agent1_entity = Entity(
-        id='user_1_agent',
-        type='agent',
-        x=100,
-        y=100,
-        properties={'name': 'CleverBot', 'health': 100}
-    )
-    
-    agent2_entity = Entity(
-        id='user_2_agent',
-        type='agent',
-        x=200,
-        y=100,
-        properties={'name': 'ObserverBot', 'health': 100}
-    )
-    
-    state.add_entity(agent1_entity)
-    state.add_entity(agent2_entity)
-    
-    print(f"✓ Added {len(state.entities)} agents to game state\n")
-    
-    # Test 3: Register agents with engine
-    print("TEST 3: Engine Registration")
+
+    state = GameState()
+    player = Entity(id='agent_1', type='agent', x=50, y=50,
+                    properties={'health': 100, 'gold': 500, 'inventory': []})
+    npc = Entity(id='npc_shopkeeper', type='npc', x=200, y=200,
+                 properties={'name': 'Gerald the Shopkeeper', 'job': 'shopkeeper',
+                             'inventory': {'sword_01': {'name': 'Iron Sword', 'value': 150}},
+                             'pricing_multiplier': 1.1})
+    hazard = Entity(id='hazard_01', type='hazard', x=300, y=300,
+                    properties={'damage': 25, 'radius': 20})
+    exit_e = Entity(id='exit_01', type='exit', x=750, y=550,
+                    properties={'radius': 25})
+
+    for e in [player, npc, hazard, exit_e]:
+        state.add_entity(e)
+
+    assert len(state.entities) == 4
+    assert 'npc_shopkeeper' in state.entities
+    print(f"✓ Added {len(state.entities)} entities")
+    print(f"  Types: {[e.type for e in state.entities.values()]}\n")
+
+    # ------------------------------------------------------------------
+    # Test 3 — Scenario Templates
+    # ------------------------------------------------------------------
+    print("TEST 3: Scenario Templates (ScenarioManager)")
     print("-" * 40)
-    
-    engine.register_agent('user_1_agent', agent1)
-    engine.register_agent('user_2_agent', agent2)
-    
-    print(f"✓ Registered {len(engine.agents)} agents with engine\n")
-    
-    # Test 4: Add traps
-    print("TEST 4: Environment Setup")
+
+    templates = ScenarioManager.get_all_templates()
+    assert len(templates) > 0, "No scenario templates registered"
+    t = ScenarioManager.get_template('market_square')
+    assert t is not None
+    assert ScenarioManager.template_exists('market_square')
+    assert not ScenarioManager.template_exists('nonexistent_scenario')
+    print(f"✓ Templates available: {[t.scenario_id for t in templates]}")
+    print(f"  market_square: {t.name}")
+    print(f"  max_turns={t.max_turns}, starting_gold={t.starting_gold}\n")
+
+    # ------------------------------------------------------------------
+    # Test 4 — Game Session (full flow)
+    # ------------------------------------------------------------------
+    print("TEST 4: Game Session Actions")
     print("-" * 40)
-    
-    trap = Trap(
-        id='trap_1',
-        x=150,
-        y=150,
-        radius=30,
-        damage=10,
-        active=True
-    )
-    judge.add_trap(trap)
-    
-    print(f"✓ Added {len(judge.traps)} traps to world\n")
-    
-    # Test 5: Test game loop
-    print("TEST 5: Game Loop Execution")
+
+    mgr = GameSessionManager()
+    sess = mgr.create_session('market_square', 'agent_test_01')
+    mgr.start_session(sess.game_id)
+
+    assert sess.status == 'in_progress'
+    assert 'agent_test_01' in sess.state.entities
+
+    # observe
+    ok, msg, data = sess.process_action('observe', {'radius': 300})
+    assert ok, f"observe failed: {msg}"
+    print(f"✓ observe: {msg}")
+
+    # move - valid
+    ok, msg, data = sess.process_action('move', {'direction': 'right', 'distance': 20})
+    assert ok, f"move failed: {msg}"
+    print(f"✓ move right: {msg}")
+
+    # move - out of bounds
+    ok, msg, _ = sess.process_action('move', {'direction': 'left', 'distance': 10000})
+    assert not ok
+    print(f"✓ out-of-bounds rejected: {msg}")
+
+    # unknown action
+    ok, msg, _ = sess.process_action('fly', {})
+    assert not ok
+    print(f"✓ unknown action rejected: {msg}\n")
+
+    # ------------------------------------------------------------------
+    # Test 5 — Engine Loop
+    # ------------------------------------------------------------------
+    print("TEST 5: Game Engine Loop")
     print("-" * 40)
-    
-    # Set state callback
+
+    engine = GameEngine(tick_rate=0.1)
     tick_count = [0]
-    async def on_state_update():
+
+    async def on_tick():
         tick_count[0] += 1
-    
-    engine.set_state_callback(on_state_update)
-    
-    # Start engine
+
+    engine.set_state_callback(on_tick)
     await engine.start()
-    print("✓ Engine started")
-    
-    # Run for a few ticks
-    await asyncio.sleep(3)
-    
-    print(f"✓ Engine completed {tick_count[0]} ticks")
-    print(f"✓ Current turn: {engine.turn}\n")
-    
-    # Stop engine
+    await asyncio.sleep(0.5)
     await engine.stop()
-    print("✓ Engine stopped\n")
-    
-    # Test 6: Collision detection
-    print("TEST 6: Collision Detection")
-    print("-" * 40)
-    
-    # Agent moving close to trap
-    valid, reason = judge.validate_movement((100, 100), (160, 160), {'width': 800, 'height': 600})
-    print(f"✓ Movement validation: {valid} ({reason})")
-    
-    # Check collisions at new position
-    collisions = judge.check_collisions('user_1_agent', (160, 160), 20, state.entities)
-    
-    if collisions:
-        print(f"✓ Collision detected: {collisions[0]['type']} (damage: {collisions[0]['damage']})\n")
-    else:
-        print(f"✓ No collisions detected\n")
-    
-    # Test 7: Final state
-    print("TEST 7: Final Game State")
-    print("-" * 40)
-    
-    final_state = state.to_dict()
-    print(f"Entities: {len(final_state['entities'])}")
-    print(f"Events logged: {len(final_state['recent_events'])}")
-    print(f"World size: {final_state['properties']['world_width']}x{final_state['properties']['world_height']}\n")
-    
-    # Test 8: Skill validation
-    print("TEST 8: Skill Validation")
-    print("-" * 40)
-    
-    # Valid agent
-    valid_agent = registrar.register_agent('valid_test', {
-        'name': 'ValidAgent',
-        'skills': {'reasoning': 1, 'observation': 1}
-    })
-    print(f"✓ Valid agent created: {valid_agent is not None}")
-    
-    # Invalid agent (missing required skills)
-    invalid_agent = registrar.register_agent('invalid_test', {
-        'name': 'InvalidAgent',
-        'skills': {}  # No skills
-    })
-    print(f"✓ Invalid agent rejected: {invalid_agent is None}\n")
-    
+
+    assert tick_count[0] > 0
+    print(f"✓ Engine ran {tick_count[0]} ticks in 0.5s\n")
+
+    # ------------------------------------------------------------------
     # Summary
-    print("="*60)
-    print("✅ Integration Tests Complete!")
-    print("="*60)
-    print("\nKey Systems Tested:")
-    print("  ✓ Agent registration & skill validation")
-    print("  ✓ Game state management")
-    print("  ✓ Engine registration & event callbacks")
-    print("  ✓ Game loop execution")
-    print("  ✓ Collision detection")
-    print("  ✓ Entity management")
-    print("\nReady for next: Frontend Rendering")
-    print("="*60 + "\n")
+    # ------------------------------------------------------------------
+    print("=" * 60)
+    print("All integration tests passed!")
+    print("=" * 60)
+    print("\nSystems verified:")
+    print("  ✓ AgentStore — open-ended skill dict, CRUD")
+    print("  ✓ GameState — generic entity types (agent, npc, hazard, exit)")
+    print("  ✓ ScenarioManager — template lookup and validation")
+    print("  ✓ GameSession — observe, move, bounds check, unknown action")
+    print("  ✓ GameEngine — async tick loop\n")
 
 
 if __name__ == "__main__":
     asyncio.run(test_integration())
+

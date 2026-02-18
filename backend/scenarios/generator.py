@@ -5,7 +5,7 @@ This module provides the interface for AI models (LLMs, Copilot, AgentGPT, etc.)
 to generate unique scenario instances from templates.
 
 When a scenario instance is created via API, this generator:
-1. Takes a ScenarioTemplate from scenarios.py
+1. Takes a ScenarioTemplate from templates.py
 2. Calls an AI model to generate unique:
    - Store names, locations, proprietor personalities
    - NPC characters, jobs, skills, relationships
@@ -19,7 +19,7 @@ Each generation is unique - no two scenario instances are identical.
 from typing import Dict, List, Any, Callable, Optional
 from dataclasses import dataclass
 import random
-from scenarios import ScenarioTemplate
+from scenarios.templates import ScenarioTemplate
 
 
 @dataclass
@@ -81,8 +81,7 @@ class ScenarioGenerator:
     The decision_maker is a pluggable AI function:
     - Can be rule-based (deterministic, fast)
     - Can be OpenAI LLM (creative, consistent)
-    - Can be Copilot (flexible, multi-modal)
-    - Can be AgentGPT (autonomously creative)
+    - Can be Anthropic Claude (flexible, multi-modal)
     - Can be any callable that returns generation data
     """
     
@@ -91,17 +90,6 @@ class ScenarioGenerator:
         Args:
             decision_maker: Callable that generates scenario content.
                 Signature: (generation_type: str, context: dict) -> dict
-                
-                Example:
-                    def ai_decision_maker(gen_type: str, context: dict):
-                        if gen_type == "stores":
-                            return openai.Completions.create(
-                                prompt=f"Generate 5 market stores: {context}"
-                            )
-                        elif gen_type == "npcs":
-                            return copilot_agent.invoke(
-                                {"type": "npc_generation", "context": context}
-                            )
         """
         self.decision_maker = decision_maker
     
@@ -120,26 +108,12 @@ class ScenarioGenerator:
         Returns:
             GeneratedScenarioInstance: complete, fully generated scenario ready to play
         """
-        
-        # Ask AI to generate stores
         stores = self._generate_stores(template)
-        
-        # Ask AI to generate NPCs
         npcs = self._generate_npcs(template, stores)
-        
-        # Ask AI to generate items and populate store inventories
         self._populate_store_inventories(template, stores)
-        
-        # Ask AI to select and define the target item
         target_item = self._generate_target_item(template, stores)
-        
-        # Ask AI to generate environmental storytelling
         environmental_story = self._generate_story(template, stores, npcs, target_item)
-        
-        # Ask AI to identify multiple solution paths
         solution_paths = self._identify_solution_paths(template, stores, npcs, target_item)
-        
-        # Calculate difficulty and efficiency expectations
         difficulty = self._calculate_difficulty(template, stores, npcs, target_item)
         gold_efficiency = self._calculate_efficiency_range(template, solution_paths)
         
@@ -165,7 +139,6 @@ class ScenarioGenerator:
     def _generate_stores(self, template: ScenarioTemplate) -> List[GeneratedStore]:
         """Ask AI to generate stores for this scenario"""
         num_stores = random.randint(*template.num_stores)
-        
         context = {
             "num_stores": num_stores,
             "themes": template.environment_themes,
@@ -173,21 +146,12 @@ class ScenarioGenerator:
             "world_height": template.world_height,
             "store_types": ["general", "specialty", "black_market", "rare", "shady"],
         }
-        
-        # Call the decision maker to generate stores
         result = self.decision_maker("generate_stores", context)
-        
-        # Parse result into GeneratedStore objects
         return self._parse_generated_stores(result)
     
-    def _generate_npcs(
-        self,
-        template: ScenarioTemplate,
-        stores: List[GeneratedStore]
-    ) -> List[GeneratedNPC]:
+    def _generate_npcs(self, template: ScenarioTemplate, stores: List[GeneratedStore]) -> List[GeneratedNPC]:
         """Ask AI to generate NPCs for this scenario"""
         num_npcs = random.randint(*template.num_npcs)
-        
         context = {
             "num_npcs": num_npcs,
             "possible_jobs": template.possible_npc_jobs,
@@ -196,18 +160,12 @@ class ScenarioGenerator:
             "stores": [s.name for s in stores],
             "themes": template.environment_themes,
         }
-        
         result = self.decision_maker("generate_npcs", context)
         return self._parse_generated_npcs(result)
     
-    def _populate_store_inventories(
-        self,
-        template: ScenarioTemplate,
-        stores: List[GeneratedStore]
-    ) -> None:
+    def _populate_store_inventories(self, template: ScenarioTemplate, stores: List[GeneratedStore]) -> None:
         """Ask AI to populate store inventories with items"""
         num_items = random.randint(*template.num_items)
-        
         context = {
             "num_items": num_items,
             "rarity_distribution": template.item_rarity_distribution,
@@ -215,17 +173,10 @@ class ScenarioGenerator:
             "store_names": [s.name for s in stores],
             "themes": template.environment_themes,
         }
-        
         result = self.decision_maker("generate_items_and_inventory", context)
-        
-        # Parse and assign items to stores
         self._assign_items_to_stores(stores, result)
     
-    def _generate_target_item(
-        self,
-        template: ScenarioTemplate,
-        stores: List[GeneratedStore]
-    ) -> Dict[str, Any]:
+    def _generate_target_item(self, template: ScenarioTemplate, stores: List[GeneratedStore]) -> Dict[str, Any]:
         """Ask AI to select and define the target item"""
         context = {
             "objective": template.objectives[0] if template.objectives else "acquire item",
@@ -233,9 +184,7 @@ class ScenarioGenerator:
             "store_names": [s.name for s in stores],
             "themes": template.environment_themes,
         }
-        
-        result = self.decision_maker("generate_target_item", context)
-        return result
+        return self.decision_maker("generate_target_item", context)
     
     def _generate_story(
         self,
@@ -252,7 +201,6 @@ class ScenarioGenerator:
             "target_item_name": target_item.get("name"),
             "tone": "immersive",
         }
-        
         result = self.decision_maker("generate_story", context)
         return result.get("story", "A mysterious market awaits...")
     
@@ -271,7 +219,6 @@ class ScenarioGenerator:
             "num_npcs": len(npcs),
             "starting_gold": template.starting_gold,
         }
-        
         result = self.decision_maker("identify_solution_paths", context)
         return result.get("paths", ["negotiate", "steal", "trade"])
     
@@ -290,40 +237,27 @@ class ScenarioGenerator:
             "guard_count": len([n for n in npcs if n.job == "guard"]),
             "thief_availability": any(n.job == "thief" for n in npcs),
         }
-        
         result = self.decision_maker("calculate_difficulty", context)
         return result.get("difficulty", 5.0)
     
-    def _calculate_efficiency_range(
-        self,
-        template: ScenarioTemplate,
-        solution_paths: List[str]
-    ) -> tuple:
+    def _calculate_efficiency_range(self, template: ScenarioTemplate, solution_paths: List[str]) -> tuple:
         """Calculate expected optimal gold spending range"""
-        # Estimate based on solution paths
-        min_gold = max(100, template.starting_gold // 3)  # Efficient path
-        max_gold = min(template.starting_gold, template.starting_gold)  # All your gold
+        min_gold = max(100, template.starting_gold // 3)
+        max_gold = template.starting_gold
         return (min_gold, max_gold)
     
-    # Helper parsing methods (implement based on your AI response format)
+    # ---- Stub parsers: implement once AI provider response format is defined ----
+
     def _parse_generated_stores(self, result: Dict) -> List[GeneratedStore]:
         """Parse AI-generated store data into GeneratedStore objects"""
-        # This depends on your AI decision maker output format
-        # Stub for now - implement based on actual AI provider
         return []
     
     def _parse_generated_npcs(self, result: Dict) -> List[GeneratedNPC]:
         """Parse AI-generated NPC data into GeneratedNPC objects"""
-        # Stub for now
         return []
     
-    def _assign_items_to_stores(
-        self,
-        stores: List[GeneratedStore],
-        inventory_data: Dict
-    ) -> None:
+    def _assign_items_to_stores(self, stores: List[GeneratedStore], inventory_data: Dict) -> None:
         """Assign generated items to store inventories"""
-        # Stub for now
         pass
 
 
@@ -343,7 +277,7 @@ def create_scenario_instance_from_template(
     Returns:
         GeneratedScenarioInstance: Complete scenario ready to play
     """
-    from scenarios import ScenarioManager
+    from scenarios.templates import ScenarioManager
     
     template = ScenarioManager.get_template(template_id)
     if not template:

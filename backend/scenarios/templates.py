@@ -105,7 +105,7 @@ SCENARIO_MARKET_SQUARE_TEMPLATE = ScenarioTemplate(
     - negotiate(npc_id, item_id, offered_price) - haggle for better deals
     - buy(store_id, item_id) - purchase an item
     - hire(npc_id) - contract an NPC (costs gold)
-    - steal(store_id, item_id) - attempt theft (success depends on circum stances)
+    - steal(store_id, item_id) - attempt theft (success depends on circumstances)
     - trade(npc_id, give_item_id, receive_item_id) - propose a trade
     """,
     objectives=[
@@ -169,10 +169,9 @@ class ScenarioManager:
     
     TEMPLATES = {
         'market_square': SCENARIO_MARKET_SQUARE_TEMPLATE,
-        # Future templates could be added here:
+        # Future templates:
         # 'heist_planning': SCENARIO_HEIST_TEMPLATE,
         # 'negotiation_chain': SCENARIO_NEGOTIATION_TEMPLATE,
-        # etc.
     }
     
     @classmethod
