@@ -115,7 +115,7 @@ class GameSession:
             prompt_summary = params.get('prompt_summary') if isinstance(params, dict) else None
             if prompt_summary:
                 try:
-                    from feed_store import feed_store
+                    from store.feed import feed_store
                     feed_store.log({
                         'timestamp': datetime.now().isoformat(),
                         'game_id': self.game_id,
