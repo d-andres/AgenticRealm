@@ -39,8 +39,8 @@ Stubs exist in `scenarios/generator.py` — implement the actual parsing:
 ### 3. Engine Orchestration for Market Actions
 
 - [ ] Connect `core/engine.py` to instance action pipeline:
-  - Parse action type (move, talk, negotiate, buy, hire, steal, trade)
-  - Validate action (gold check, guard presence, etc.)
+  - Parse action type from request
+  - Validate action against world rules defined by the scenario template
   - Execute user action + update state
   - Broadcast event to relevant NPCs (`perceive`)
   - Run each NPC's `decide` + `act`

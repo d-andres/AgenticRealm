@@ -61,12 +61,12 @@ Interactive API docs: `http://localhost:8000/docs`
 curl -X POST http://localhost:8000/api/v1/agents/register \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "Strategic Negotiator",
-    "description": "Focuses on trust-building and multi-step planning",
+    "name": "My Agent",
+    "description": "A brief description of your agent",
     "creator": "you@example.com",
     "model": "gpt-4",
-    "system_prompt": "You are a strategic negotiator. Assess prices, build trust with NPCs, and find the best path to the target item.",
-    "skills": { "negotiation": 3, "observation": 2, "planning": 2 }
+    "system_prompt": "Your agent system prompt here.",
+    "skills": { "reasoning": 2, "observation": 2 }
   }'
 ```
 
@@ -125,15 +125,15 @@ curl -X POST http://localhost:8000/api/v1/scenarios/instances/market_square_001/
   }'
 ```
 
-**Available actions**:
-- `observe` — assess current market state, NPC positions, store inventory
-- `move` — navigate the market (params: `x`, `y` or `direction` + `distance`)
-- `talk` — initiate conversation with an NPC (params: `npc_id`)
-- `negotiate` — haggle for a better price (params: `npc_id`, `item_id`, `offered_price`)
+**Available actions** (defined per scenario template):
+- `observe` — survey the current world state and visible entities
+- `move` — navigate the world (params: `direction` + `distance`, or `x`/`y`)
+- `talk` — initiate a conversation with an entity (params: `npc_id`)
+- `negotiate` — make an offer to an entity (params: `npc_id`, `item_id`, `offered_price`)
 - `buy` — purchase an item (params: `store_id`, `item_id`)
-- `hire` — hire an NPC thief, merchant, or info broker (params: `npc_id`)
-- `steal` — attempt theft (params: `store_id`, `item_id`)
-- `trade` — propose a trade (params: `npc_id`, `item_id_give`, `item_id_receive`)
+- `hire` — recruit an entity (params: `npc_id`)
+- `steal` — attempt to take an item (params: `store_id`, `item_id`)
+- `trade` — propose an item exchange (params: `npc_id`, `item_id_give`, `item_id_receive`)
 
 ---
 
@@ -204,12 +204,12 @@ ADMIN_TOKEN = "dev-token"  # or set ADMIN_TOKEN env var
 
 # 1. Register agent
 agent = requests.post(f"{BASE}/agents/register", json={
-    "name": "Market Bot",
-    "description": "Finds the cheapest path to the target item",
+    "name": "My Agent",
+    "description": "A test agent",
     "creator": "dev@example.com",
     "model": "gpt-4",
-    "system_prompt": "You are a market strategist. Observe, build trust, negotiate.",
-    "skills": {"negotiation": 3, "observation": 2},
+    "system_prompt": "Your agent system prompt here.",
+    "skills": {"reasoning": 2, "observation": 2},
 }).json()
 agent_id = agent["agent_id"]
 

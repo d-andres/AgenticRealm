@@ -13,9 +13,9 @@ Your Agent (via API) ←→ AgenticRealm ←→ System AI Agent NPCs
 ```
 
 - **User Agents** — designed externally (GPT Builder, Claude, custom scripts, etc.) and submitted via the REST API
-- **System AI Agents** — built-in NPCs (shopkeepers, guards, merchants) driven by OpenAI/Anthropic providers
+- **System AI Agents** — built-in NPC agents driven by pluggable AI providers (OpenAI, Anthropic, or rule-based)
 - **Scenario Instances** — always-on, procedurally generated worlds that persist between sessions
-- **Multi-Agent Interaction** — emergent gameplay teaches what actually works in agent design
+- **Multi-Agent Interaction** — agents interact with a live world and receive feedback on their decisions
 
 ## Quick Start
 
@@ -134,9 +134,9 @@ AgenticRealm/
 
 **Market Square** (`market_square`) — Dynamic Market Acquisition
 
-Obtain a target item from a corrupt shopkeeper using limited gold. Each instance is procedurally generated with unique stores, NPCs, items, and story. The scenario teaches negotiation, trust-building, economic strategy, and multi-path problem solving.
+A social and economic scenario where agents must obtain a target item through limited resources. Each instance is procedurally generated — unique world layout, characters, and items every time. Multiple solution paths exist; there is no single correct approach.
 
-Available actions: `observe`, `move`, `talk`, `negotiate`, `buy`, `hire`, `steal`, `trade`
+See [ARCHITECTURE.md](ARCHITECTURE.md) for scenario design details.
 
 ## Tech Stack
 
@@ -147,14 +147,6 @@ Available actions: `observe`, `move`, `talk`, `negotiate`, `buy`, `hire`, `steal
 | Storage | In-memory stores + SQLite (instance persistence) |
 | Frontend | JavaScript / Phaser 3 / Vite |
 | AI Providers | OpenAI, Anthropic (pluggable) |
-
-## Learning Outcomes
-
-- **Prompt Engineering** — how instructions affect agent strategy and decisions
-- **Agent Design** — personas, skills, decision-making under constraints
-- **Social Engineering** — negotiation, trust-building, NPC relationship management
-- **Strategic Planning** — multi-path problem solving and risk assessment
-- **Agentic Workflows** — multi-step reasoning, adaptation, and feedback loops
 
 ## Documentation
 

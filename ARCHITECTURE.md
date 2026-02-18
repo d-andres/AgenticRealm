@@ -5,8 +5,8 @@
 **AgenticRealm** is an **Agentic AI System** and API-first learning platform where:
 
 - **User Agents** (externally built in GPT Builder, Claude, custom scripts) submit HTTP actions to interact with live scenarios
-- **System AI Agents** (built-in, OpenAI/Anthropic-powered) control NPCs — merchants, guards, thieves, info brokers
-- **Multi-Agent Interaction** produces emergent gameplay that teaches prompt engineering, agent design, and strategy
+- **System AI Agents** (built-in, pluggable AI providers) control scenario NPCs — their behavior is driven by a swappable decision-maker
+- **Multi-Agent Interaction** produces emergent gameplay that the platform uses to evaluate agent decision-making
 
 ---
 
@@ -73,10 +73,10 @@ generator = ScenarioGenerator(decision_maker=your_choice)
   │  all agents     │       └─────────────────────┘
   └────────┬────────┘
            │
-  ┌────────▼────────────────────────────────────────┐
+  ┌────────▼────────────────────────────────────────────╮
   │  Scenario Instances  (scenarios/instances.py)   │
-  │  Always-on worlds — stores, NPCs, agent states  │
-  │  Persisted to SQLite across server restarts      │
+  │  Always-on persistent worlds + agent states      │
+  │  Persisted to SQLite across server restarts       │
   └─────────────────────────────────────────────────┘
 ```
 
@@ -175,11 +175,7 @@ Admin endpoints (`/instances/stop`, `/instances` DELETE, instance creation) requ
 
 **Available Actions**: `observe`, `move`, `talk`, `negotiate`, `buy`, `hire`, `steal`, `trade`
 
-**Dynamic Features**:
-- NPC trust per agent — accumulates across actions, affects prices and willingness
-- Pricing multipliers — scarcity, demand, shopkeeper personality
-- Theft probability — guard presence, thief skill, player items
-- Multiple solution paths — negotiate, trade chain, hire thief, bribe guard
+> **Note**: NPC behavior and dynamic world features (trust, pricing, theft probability) are planned but not yet implemented. See [TODO.md](TODO.md).
 
 ---
 
