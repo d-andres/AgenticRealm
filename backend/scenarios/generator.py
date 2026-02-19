@@ -16,8 +16,9 @@ When a scenario instance is created via API, this generator:
 Each generation is unique - no two scenario instances are identical.
 """
 
-from typing import Dict, List, Any, Callable, Optional
+from typing import Dict, List, Any, Callable, Optional, Tuple
 from dataclasses import dataclass
+import math
 import random
 from scenarios.templates import ScenarioTemplate
 
@@ -249,16 +250,56 @@ class ScenarioGenerator:
     # ---- Stub parsers: implement once AI provider response format is defined ----
 
     def _parse_generated_stores(self, result: Dict) -> List[GeneratedStore]:
-        """Parse AI-generated store data into GeneratedStore objects"""
-        return []
-    
+        """Parse AI- or rule-generated store data into GeneratedStore objects."""
+        stores = []
+        for s in result.get("stores", []):
+            stores.append(GeneratedStore(
+                store_id=s.get("store_id", f"store_{len(stores)+1}"),
+                name=s.get("name", "Unknown Store"),
+                location=(float(s.get("x", 0)), float(s.get("y", 0))),
+                proprietor_name=s.get("proprietor", "Unknown"),
+                proprietor_personality=s.get("proprietor_personality", "neutral"),
+                inventory=s.get("inventory", {}),
+                pricing_multiplier=float(s.get("pricing_multiplier", 1.0)),
+                store_type=s.get("store_type", "general"),
+            ))
+        return stores
+
     def _parse_generated_npcs(self, result: Dict) -> List[GeneratedNPC]:
-        """Parse AI-generated NPC data into GeneratedNPC objects"""
-        return []
-    
+        """Parse AI- or rule-generated NPC data into GeneratedNPC objects."""
+        npcs = []
+        for n in result.get("npcs", []):
+            npcs.append(GeneratedNPC(
+                npc_id=n.get("npc_id", f"npc_{len(npcs)+1}"),
+                name=n.get("name", "Unknown"),
+                job=n.get("job", "unknown"),
+                location=(float(n.get("x", 0)), float(n.get("y", 0))),
+                personality=n.get("personality", "neutral"),
+                skills=n.get("skills", {}),
+                initial_trust=float(n.get("initial_trust", 0.5)),
+                hiring_cost=n.get("hiring_cost"),
+                relationship_hooks=[],
+            ))
+        return npcs
+
     def _assign_items_to_stores(self, stores: List[GeneratedStore], inventory_data: Dict) -> None:
-        """Assign generated items to store inventories"""
-        pass
+        """Assign generated items to store inventories."""
+        items = inventory_data.get("items", [])
+        assignments = inventory_data.get("assignments", {})
+        item_map = {item["item_id"]: item for item in items}
+        assigned_ids: set = set()
+
+        for store in stores:
+            for iid in assignments.get(store.store_id, []):
+                if iid in item_map:
+                    store.inventory[iid] = item_map[iid]
+                    assigned_ids.add(iid)
+
+        # Distribute unassigned items round-robin
+        unassigned = [item for item in items if item["item_id"] not in assigned_ids]
+        for j, item in enumerate(unassigned):
+            if stores:
+                stores[j % len(stores)].inventory[item["item_id"]] = item
 
 
 def create_scenario_instance_from_template(
@@ -268,20 +309,301 @@ def create_scenario_instance_from_template(
 ) -> GeneratedScenarioInstance:
     """
     Convenience function to generate a scenario instance.
-    
+
     Args:
         template_id: ID of scenario template to use
         instance_id: Unique ID for this instance
         decision_maker: AI/logic function for generation
-        
+
     Returns:
         GeneratedScenarioInstance: Complete scenario ready to play
     """
     from scenarios.templates import ScenarioManager
-    
+
     template = ScenarioManager.get_template(template_id)
     if not template:
         raise ValueError(f"Unknown scenario template: {template_id}")
-    
+
     generator = ScenarioGenerator(decision_maker)
     return generator.generate_instance(template, instance_id)
+
+
+# ---------------------------------------------------------------------------
+# Rule-based decision maker (no LLM required)
+# ---------------------------------------------------------------------------
+
+_STORE_NAME_PARTS = [
+    ["The Golden", "The Silver", "The Iron", "The Rusty", "The Hidden", "The Open"],
+    ["Barrel", "Anvil", "Lantern", "Scales", "Vault", "Stall", "Bazaar"],
+]
+_PROPRIETOR_FIRST = ["Gareth", "Mira", "Orin", "Sera", "Tomas", "Lyra", "Edric", "Nessa"]
+_PROPRIETOR_LAST  = ["Dusk", "Coin", "Flint", "Vale", "Shaw", "Cross", "Pike", "Marsh"]
+_PERSONALITIES    = [
+    "friendly and chatty",
+    "suspicious but fair",
+    "gruff and impatient",
+    "sly and calculating",
+    "honest and straightforward",
+    "secretive and cautious",
+]
+_NPC_FIRST = ["Brin", "Cael", "Dova", "Fenn", "Hara", "Jorin", "Kell", "Lena"]
+_NPC_LAST  = ["Stone", "Reed", "Ash", "Moon", "Tide", "Wind", "Scar", "Bolt"]
+
+_ITEM_POOL = [
+    {"item_id": "ruby_gem",      "name": "Ruby Gem",            "value": 800,  "rarity": "rare",     "description": "A deep crimson gemstone",          "tradeable": True},
+    {"item_id": "silver_dagger", "name": "Silver Dagger",        "value": 300,  "rarity": "uncommon", "description": "Finely crafted short blade",        "tradeable": True},
+    {"item_id": "healing_potion","name": "Healing Potion",       "value": 80,   "rarity": "common",   "description": "Restores vitality",                 "tradeable": True},
+    {"item_id": "silk_cloth",    "name": "Bolt of Silk Cloth",   "value": 120,  "rarity": "common",   "description": "Smooth and lustrous fabric",        "tradeable": True},
+    {"item_id": "old_map",       "name": "Old Maps Bundle",      "value": 200,  "rarity": "uncommon", "description": "Charts of unknown territories",     "tradeable": True},
+    {"item_id": "ancient_coin",  "name": "Ancient Coin",         "value": 450,  "rarity": "rare",     "description": "Minted in a forgotten empire",      "tradeable": True},
+    {"item_id": "iron_key",      "name": "Iron Key",             "value": 50,   "rarity": "common",   "description": "Unlocks something important",       "tradeable": True},
+    {"item_id": "spell_scroll",  "name": "Spell Scroll",         "value": 600,  "rarity": "rare",     "description": "Arcane text of unknown power",       "tradeable": True},
+    {"item_id": "spice_bundle",  "name": "Exotic Spice Bundle",  "value": 90,   "rarity": "common",   "description": "Rare spices from distant lands",     "tradeable": True},
+    {"item_id": "bronze_statue", "name": "Bronze Statuette",     "value": 350,  "rarity": "uncommon", "description": "A small but intricately cast figure", "tradeable": True},
+    {"item_id": "poison_vial",   "name": "Vial of Dark Tincture","value": 250,  "rarity": "uncommon", "description": "Unclear purpose; handle carefully",  "tradeable": False},
+    {"item_id": "lockpick_set",  "name": "Lockpick Set",         "value": 150,  "rarity": "common",   "description": "Professional-grade tools",           "tradeable": True},
+    {"item_id": "jade_figurine", "name": "Jade Figurine",        "value": 900,  "rarity": "legendary","description": "Exquisite miniature jade carving",    "tradeable": True},
+    {"item_id": "torn_letter",   "name": "Torn Letter",          "value": 30,   "rarity": "common",   "description": "Partial correspondence; intriguing", "tradeable": True},
+    {"item_id": "copper_ingot",  "name": "Copper Ingot",         "value": 60,   "rarity": "common",   "description": "Raw material; useful to smiths",     "tradeable": True},
+]
+
+
+def _rule_based_decision_maker(generation_type: str, context: Dict) -> Dict:
+    """
+    Deterministic rule-based decision maker for scenario generation.
+
+    Does NOT require any LLM or API key.  All output is seeded from
+    ``random`` so results vary between instances but never block on I/O.
+    Used as the fallback when no ``scenario_generator`` AI agent is connected.
+    """
+    rng = random.Random()  # unseeded → different each call
+
+    if generation_type == "generate_stores":
+        num = context.get("num_stores", 4)
+        world_w = context.get("world_width", 800)
+        world_h = context.get("world_height", 600)
+        stores = []
+        for i in range(num):
+            stype = rng.choice(["general", "specialty", "black_market", "rare", "shady"])
+            x = rng.uniform(50, world_w - 50)
+            y = rng.uniform(50, world_h - 50)
+            name = rng.choice(_STORE_NAME_PARTS[0]) + " " + rng.choice(_STORE_NAME_PARTS[1])
+            stores.append({
+                "store_id": f"store_{i+1}",
+                "name": name,
+                "proprietor": rng.choice(_PROPRIETOR_FIRST) + " " + rng.choice(_PROPRIETOR_LAST),
+                "proprietor_personality": rng.choice(_PERSONALITIES),
+                "store_type": stype,
+                "pricing_multiplier": round(rng.uniform(0.8, 2.5), 2),
+                "x": round(x),
+                "y": round(y),
+                "inventory": {},
+            })
+        return {"stores": stores}
+
+    if generation_type == "generate_npcs":
+        num = context.get("num_npcs", 5)
+        possible_jobs = context.get("possible_jobs", ["shopkeeper", "guard", "thief", "merchant"])
+        world_w = context.get("world_width", 800)
+        world_h = context.get("world_height", 600)
+        npcs = []
+        # Guarantee at least one guard so steal probability isn't trivially 70 %
+        jobs = ["guard"] + [rng.choice(possible_jobs) for _ in range(max(0, num - 1))]
+        rng.shuffle(jobs)
+        for i, job in enumerate(jobs):
+            hiring_cost = None
+            if job in ("thief", "merchant", "information_broker", "fence"):
+                hiring_cost = rng.randint(50, 300)
+            npcs.append({
+                "npc_id": f"npc_{i+1}",
+                "name": rng.choice(_NPC_FIRST) + " " + rng.choice(_NPC_LAST),
+                "job": job,
+                "personality": rng.choice(_PERSONALITIES),
+                "skills": {job: rng.randint(1, 3)},
+                "initial_trust": round(rng.uniform(0.2, 0.9), 2),
+                "hiring_cost": hiring_cost,
+                "x": round(rng.uniform(30, world_w - 30)),
+                "y": round(rng.uniform(30, world_h - 30)),
+            })
+        return {"npcs": npcs}
+
+    if generation_type == "generate_items_and_inventory":
+        num_items = context.get("num_items", 10)
+        items = rng.sample(_ITEM_POOL, min(num_items, len(_ITEM_POOL)))
+        return {"items": items, "assignments": {}}
+
+    if generation_type == "generate_target_item":
+        target = rng.choice([i for i in _ITEM_POOL if i["rarity"] in ("rare", "legendary")])
+        return {
+            "item_id": target["item_id"],
+            "name": target["name"],
+            "base_value": target["value"] * 2,
+            "why_valuable": "Rumoured to be sought by several powerful factions.",
+            "location": "store_1",
+            "proprietor_reaction": "Hesitant — asks why you want it.",
+        }
+
+    if generation_type == "generate_story":
+        return {"story": "The market hums with activity.  Opportunity and danger lurk in equal measure."}
+
+    if generation_type in ("identify_solution_paths", "calculate_difficulty"):
+        return {}
+
+    return {}
+
+
+# ---------------------------------------------------------------------------
+# Main entry point used by the route layer
+# ---------------------------------------------------------------------------
+
+async def generate_world_entities(
+    instance,
+    agent_pool=None,
+) -> None:
+    """Generate all world entities for a ``ScenarioInstance`` and apply them.
+
+    Priority order for the decision maker:
+    1. A connected ``scenario_generator`` AI agent from *agent_pool* (LLM-backed).
+    2. The built-in ``_rule_based_decision_maker`` (instant, no API key needed).
+
+    The function:
+    - Marks the instance as ``"generating"``.
+    - Builds stores, NPCs, and items via the chosen decision maker.
+    - Converts results to :class:`core.state.Entity` objects.
+    - Calls ``instance.apply_entities(...)`` which marks the instance ``"active"``.
+
+    This is designed to be run as a fire-and-forget background task so that
+    the HTTP response is returned immediately while generation happens in the
+    background.
+    """
+    from core.state import Entity
+    from ai_agents.interfaces import AgentRole
+
+    instance.status = "generating"
+    template = instance.scenario
+    if template is None:
+        instance.status = "error"
+        return
+
+    # --- Choose decision maker -------------------------------------------
+    def _sync_decision_maker(gen_type: str, ctx: Dict) -> Dict:
+        return _rule_based_decision_maker(gen_type, ctx)
+
+    async def _ai_decision_maker(gen_type: str, ctx: Dict) -> Dict:
+        resp = await agent_pool.request(
+            role=AgentRole.SCENARIO_GENERATOR,
+            action=gen_type,
+            context=ctx,
+        )
+        if resp and resp.success and resp.result and "error" not in resp.result:
+            return resp.result
+        # Fall back to rule-based if AI returns nothing useful
+        return _rule_based_decision_maker(gen_type, ctx)
+
+    use_ai = (
+        agent_pool is not None
+        and AgentRole.SCENARIO_GENERATOR in agent_pool.agents
+        and len(agent_pool.agents[AgentRole.SCENARIO_GENERATOR]) > 0
+    )
+
+    async def call(gen_type: str, ctx: Dict) -> Dict:
+        if use_ai:
+            return await _ai_decision_maker(gen_type, ctx)
+        return _sync_decision_maker(gen_type, ctx)
+
+    try:
+        # 1. Generate stores
+        num_stores = random.randint(*template.num_stores)
+        store_data = await call("generate_stores", {
+            "num_stores": num_stores,
+            "themes": template.environment_themes,
+            "world_width": template.world_width,
+            "world_height": template.world_height,
+        })
+        gen = ScenarioGenerator(_sync_decision_maker)
+        stores = gen._parse_generated_stores(store_data)
+
+        # 2. Generate NPCs
+        num_npcs = random.randint(*template.num_npcs)
+        npc_data = await call("generate_npcs", {
+            "num_npcs": num_npcs,
+            "possible_jobs": template.possible_npc_jobs,
+            "world_width": template.world_width,
+            "world_height": template.world_height,
+            "stores": [s.name for s in stores],
+            "themes": template.environment_themes,
+        })
+        npcs = gen._parse_generated_npcs(npc_data)
+
+        # 3. Generate items and assign to stores
+        num_items = random.randint(*template.num_items)
+        item_data = await call("generate_items_and_inventory", {
+            "num_items": num_items,
+            "rarity_distribution": template.item_rarity_distribution,
+            "num_stores": len(stores),
+            "store_names": [s.name for s in stores],
+            "themes": template.environment_themes,
+        })
+        gen._assign_items_to_stores(stores, item_data)
+
+        # 4. Determine target item (place it in the first store if not already there)
+        target_data = await call("generate_target_item", {
+            "objective": template.objectives[0] if template.objectives else "acquire item",
+            "starting_gold": template.starting_gold,
+            "store_names": [s.name for s in stores],
+            "themes": template.environment_themes,
+        })
+        target_item_id: Optional[str] = target_data.get("item_id")
+        if target_item_id and stores:
+            # Ensure the target item is in at least one store
+            already_present = any(target_item_id in s.inventory for s in stores)
+            if not already_present:
+                from scenarios.generator import _ITEM_POOL as pool
+                item_def = next((it for it in pool if it["item_id"] == target_item_id), None)
+                if item_def:
+                    stores[0].inventory[target_item_id] = item_def
+
+        # 5. Convert to Entity objects and apply
+        entities = []
+
+        for store in stores:
+            entities.append(Entity(
+                id=store.store_id,
+                type="store",
+                x=store.location[0],
+                y=store.location[1],
+                properties={
+                    "name": store.name,
+                    "proprietor": store.proprietor_name,
+                    "proprietor_personality": store.proprietor_personality,
+                    "store_type": store.store_type,
+                    "pricing_multiplier": store.pricing_multiplier,
+                    "inventory": store.inventory,
+                    "default_response": f"{store.proprietor_name} looks up and nods.",
+                },
+            ))
+
+        for npc in npcs:
+            entities.append(Entity(
+                id=npc.npc_id,
+                type="npc",
+                x=npc.location[0],
+                y=npc.location[1],
+                properties={
+                    "name": npc.name,
+                    "job": npc.job,
+                    "personality": npc.personality,
+                    "skills": npc.skills,
+                    "trust": npc.initial_trust,
+                    "hiring_cost": npc.hiring_cost,
+                    "default_response": f"{npc.name} ({npc.job}) regards you with a {npc.personality} expression.",
+                },
+            ))
+
+        instance.apply_entities(entities, target_item_id=target_item_id)
+        print(f"[Generator] Instance {instance.instance_id} ready: "
+              f"{len(stores)} stores, {len(npcs)} NPCs, target={target_item_id}")
+
+    except Exception as e:
+        print(f"[Generator] Generation failed for {instance.instance_id}: {e}")
+        instance.status = "error"

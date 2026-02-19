@@ -7,13 +7,15 @@ Route ordering is intentional: literal paths (/instances/...) are defined
 before parameterised paths (/{scenario_id}) so FastAPI resolves them correctly.
 """
 
-from fastapi import APIRouter, HTTPException, Header, Query
+from fastapi import APIRouter, HTTPException, Header, Query, BackgroundTasks
 from typing import List
 from models import ScenarioResponse
 from store.agent_store import agent_store
 from scenarios.templates import ScenarioManager
 from scenarios.instances import scenario_instance_manager
+from scenarios.generator import generate_world_entities
 from game_session import session_manager
+from ai_agents.agent_pool import get_agent_pool
 import os
 
 router = APIRouter(tags=["Scenarios"])
@@ -50,6 +52,7 @@ async def list_scenario_instances():
         {
             'instance_id': i.instance_id,
             'scenario_id': i.scenario_id,
+            'status': getattr(i, 'status', 'active'),
             'players': i.players,
             'created_at': i.created_at.isoformat(),
         }
@@ -66,6 +69,7 @@ async def get_scenario_instance(instance_id: str):
     return {
         'instance_id': inst.instance_id,
         'scenario_id': inst.scenario_id,
+        'status': getattr(inst, 'status', 'active'),
         'players': inst.players,
         'created_at': inst.created_at.isoformat(),
         'active': getattr(inst, 'active', True),
@@ -100,10 +104,18 @@ async def join_scenario_instance(instance_id: str, agent_id: str = Query(...)):
 
     The agent is added into the live world state and a dedicated game session is
     created for it.  Other agents in the same instance are unaffected.
+    Joining is only allowed once the instance status is ``active``.
     """
     instance = scenario_instance_manager.get_instance(instance_id)
     if not instance:
         raise HTTPException(status_code=404, detail="Instance not found")
+
+    if getattr(instance, 'status', 'active') not in ('active',):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Instance is not ready yet (status: {instance.status}). "
+                   "Poll GET /instances/{instance_id} until status is 'active'."
+        )
 
     if not agent_store.agent_exists(agent_id):
         raise HTTPException(status_code=404, detail="Agent not found")
@@ -145,13 +157,31 @@ async def get_scenario(scenario_id: str):
 
 
 @router.post("/{scenario_id}/instances", summary="Create a new scenario instance")
-async def start_scenario_instance(scenario_id: str):
-    """Spawn a persistent always-on world from a scenario template."""
+async def start_scenario_instance(scenario_id: str, background_tasks: BackgroundTasks):
+    """
+    Spawn a persistent always-on world from a scenario template.
+
+    The instance is created immediately (status ``generating``) and world
+    entities are built in the background — either by a connected
+    ``scenario_generator`` AI agent, or by the built-in rule-based engine
+    if no AI agent is registered.  Poll
+    ``GET /api/v1/scenarios/instances/{instance_id}`` until ``status`` is
+    ``active`` before sending agents to join.
+    """
     if not ScenarioManager.get_template(scenario_id):
         raise HTTPException(status_code=404, detail="Scenario not found")
     instance = scenario_instance_manager.create_instance(scenario_id)
+
+    async def _generate():
+        pool = await get_agent_pool()
+        await generate_world_entities(instance, agent_pool=pool)
+
+    background_tasks.add_task(_generate)
+
     return {
         'instance_id': instance.instance_id,
         'scenario_id': scenario_id,
+        'status': instance.status,
+        'message': 'World generation started. Poll status until active.',
         'created_at': instance.created_at.isoformat(),
     }

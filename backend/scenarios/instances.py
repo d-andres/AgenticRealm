@@ -22,6 +22,8 @@ class ScenarioInstance:
         self.created_at = datetime.now()
         self.started = False
         self.active = True
+        # Lifecycle: pending → generating → active → stopped
+        self.status = "pending"
         if self.scenario:
             self._setup_world()
         # Persist initial snapshot
@@ -46,6 +48,27 @@ class ScenarioInstance:
             'max_turns': self.scenario.max_turns,
             'allowed_actions': [a.value for a in self.scenario.allowed_actions],
         })
+
+    def apply_entities(self, entities: list, target_item_id: Optional[str] = None) -> None:
+        """Populate the world with AI- or rule-generated entities and mark as active.
+
+        Called by the background generation task after the world has been built.
+        ``entities`` is a list of :class:`core.state.Entity` objects produced by
+        ``scenarios.generator.generate_world_entities``.
+        """
+        for entity in entities:
+            if entity.id not in self.state.entities:
+                self.state.add_entity(entity)
+
+        if target_item_id:
+            self.state.properties['target_item_id'] = target_item_id
+
+        self.status = "active"
+        self.started = True
+        try:
+            db.save_instance_dict(self.to_dict())
+        except Exception:
+            pass
 
     def add_player_entity(self, agent_id: str):
         """Add a player entity to the world at the default starting position.
@@ -82,7 +105,8 @@ class ScenarioInstance:
             'state': self.state.to_dict(),
             'players': self.players,
             'created_at': self.created_at.isoformat(),
-            'active': getattr(self, 'active', True)
+            'active': getattr(self, 'active', True),
+            'status': getattr(self, 'status', 'active'),
         }
 
     @classmethod
@@ -96,6 +120,7 @@ class ScenarioInstance:
         inst.created_at = datetime.fromisoformat(data.get('created_at')) if data.get('created_at') else datetime.now()
         inst.started = False
         inst.active = data.get('active', True)
+        inst.status = data.get('status', 'active')
         return inst
 
 
