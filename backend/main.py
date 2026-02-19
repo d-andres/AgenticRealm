@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from core.engine import GameEngine
+from core.engine import GameEngine, set_engine
 from ai_agents.agent_pool import get_agent_pool, shutdown_agent_pool
 from routes import (
     agents_router,
@@ -90,6 +90,7 @@ async def get_info():
 # ---- Engine lifecycle -----------------------------------------------
 
 engine = GameEngine(tick_rate=float(os.getenv('TICK_RATE', '1.0')))
+set_engine(engine)  # register as global singleton for scenarios/instances.py
 
 
 @app.on_event('startup')

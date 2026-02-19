@@ -287,9 +287,11 @@ class OpenAINPCAdminAgent(NPCAdminAgentInterface):
     async def handle_request(self, request: AIAgentRequest) -> AIAgentResponse:
         try:
             dispatch = {
-                "npc_decision": self._npc_decision,
+                "npc_decision":   self._npc_decision,
                 "npc_perception": self._npc_perception,
                 "npc_interaction": self._npc_interaction,
+                "npc_reaction":   self._npc_reaction,
+                "npc_idle":       self._npc_idle,
             }
             handler = dispatch.get(request.action)
             if handler is None:
@@ -413,6 +415,61 @@ class OpenAINPCAdminAgent(NPCAdminAgentInterface):
             return interaction
         except json.JSONDecodeError:
             return {"error": "Failed to parse response", "raw": raw}
+
+    async def _npc_reaction(self, context: Dict[str, Any]) -> Dict:
+        """React to one or more player events near this NPC (Reaction Phase)."""
+        npc_name = context.get("npc_name", "NPC")
+        npc_job  = context.get("npc_job", "unknown")
+        npc_pers = context.get("npc_personality", "neutral")
+        npc_trust = context.get("npc_trust", 0.5)
+        events   = context.get("events", [])
+        events_desc = "; ".join(
+            f"{ev.get('type','event')}: {ev.get('data',{})}" for ev in events
+        )
+        prompt = (
+            f"You are {npc_name}, a {npc_job}. Personality: {npc_pers}. "
+            f"Current trust in the player: {npc_trust:.1f}/1.0.\n\n"
+            f"Events that just occurred near you: {events_desc}\n\n"
+            "How does this change your attitude? Return JSON ONLY:\n"
+            "{\n"
+            '  "trust_delta": <float -0.3 to 0.3>,\n'
+            '  "mood": "<one word>",\n'
+            '  "last_ai_message": "<brief in-character reaction, 1 sentence>"\n'
+            "}"
+        )
+        raw = await self._call_api(
+            prompt,
+            system_message="You are a reactive NPC. Return only valid JSON, no commentary.",
+        )
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            return {"trust_delta": 0.0}
+
+    async def _npc_idle(self, context: Dict[str, Any]) -> Dict:
+        """Autonomous idle/patrol behaviour (Autonomous Phase, every ~30 ticks)."""
+        npc_name = context.get("npc_name", "NPC")
+        npc_job  = context.get("npc_job", "unknown")
+        npc_pers = context.get("npc_personality", "neutral")
+        npc_mood = context.get("npc_mood", "neutral")
+        turn     = context.get("world_turn", 0)
+        prompt = (
+            f"You are {npc_name}, a {npc_job}. Personality: {npc_pers}. "
+            f"Current mood: {npc_mood}. World turn: {turn}.\n\n"
+            "What are you doing right now? Return JSON ONLY:\n"
+            "{\n"
+            '  "mood": "<one word>",\n'
+            '  "last_ai_message": "<brief in-character idle action, 1 sentence>"\n'
+            "}"
+        )
+        raw = await self._call_api(
+            prompt,
+            system_message="You are an NPC going about their day. Return only valid JSON, no commentary.",
+        )
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            return {}
 
     # ------------------------------------------------------------------
     # Low-level API call

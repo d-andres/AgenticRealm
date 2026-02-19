@@ -132,24 +132,42 @@ async def test_integration():
     print(f"✓ unknown action rejected: {msg}\n")
 
     # ------------------------------------------------------------------
-    # Test 5 — Engine Loop
+    # Test 5 — Engine Loop + Instance Registry
     # ------------------------------------------------------------------
-    print("TEST 5: Game Engine Loop")
+    print("TEST 5: Game Engine Loop + Instance Registry")
     print("-" * 40)
 
     engine = GameEngine(tick_rate=0.1)
-    tick_count = [0]
 
-    async def on_tick():
-        tick_count[0] += 1
+    # Registry starts empty
+    assert len(engine._instances) == 0
+    print("✓ Engine starts with empty instance registry")
 
-    engine.set_state_callback(on_tick)
+    # Start engine, let it tick with no registered instances
     await engine.start()
-    await asyncio.sleep(0.5)
-    await engine.stop()
+    await asyncio.sleep(0.35)
+    assert engine.running
+    assert engine.turn > 0
+    print(f"✓ Engine ran {engine.turn} ticks in 0.35s with no instances")
 
-    assert tick_count[0] > 0
-    print(f"✓ Engine ran {tick_count[0]} ticks in 0.5s\n")
+    # Stub instance to verify register / unregister
+    class _StubInstance:
+        def __init__(self):
+            self.instance_id = "stub-001"
+            self.status      = "active"
+
+    stub = _StubInstance()
+    engine.register_instance(stub)
+    assert "stub-001" in engine._instances
+    print("✓ register_instance() adds entry to _instances")
+
+    engine.unregister_instance("stub-001")
+    assert "stub-001" not in engine._instances
+    print("✓ unregister_instance() removes entry from _instances")
+
+    await engine.stop()
+    assert not engine.running
+    print("✓ engine.stop() halts the loop\n")
 
     # ------------------------------------------------------------------
     # Summary
@@ -162,7 +180,7 @@ async def test_integration():
     print("  ✓ GameState — generic entity types (agent, npc, hazard, exit)")
     print("  ✓ ScenarioManager — template lookup and validation")
     print("  ✓ GameSession — observe, move, bounds check, unknown action")
-    print("  ✓ GameEngine — async tick loop\n")
+    print("  ✓ GameEngine — async tick loop + instance registry\n")
 
 
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ Maintains the authoritative state of the game world including:
 - Event log
 """
 
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, asdict
 from datetime import datetime
 import json
@@ -46,6 +46,9 @@ class GameState:
             "world_height": 600,
             "created_at": datetime.now().isoformat()
         }
+        # Set by GameSession/ScenarioInstance so events are scoped to the
+        # correct instance queue in the EventBus.
+        self._instance_id: Optional[str] = None
         
     def add_entity(self, entity: Entity):
         """Add an entity to the world"""
@@ -70,7 +73,11 @@ class GameState:
             self.log_event("entity_updated", {"entity_id": entity_id, "updates": updates})
             
     def log_event(self, event_type: str, data: Dict[str, Any]):
-        """Log an event to the event history"""
+        """Log an event to the event history and publish it to the EventBus.
+
+        The EventBus publish is fire-and-forget: it enqueues the event for the
+        engine to process on the next tick.  This method never blocks.
+        """
         event = {
             "timestamp": datetime.now().isoformat(),
             "turn": self.turn,
@@ -78,6 +85,27 @@ class GameState:
             "data": data
         }
         self.events.append(event)
+
+        # Publish to the EventBus so the engine can dispatch it to AI agents.
+        # Only publish when an instance_id is set (avoids noise during tests).
+        if self._instance_id:
+            try:
+                from core.event_bus import event_bus, GameEvent
+                # Determine world position from the event data if available.
+                npc_id = data.get('npc_id') or data.get('target_npc_id')
+                ex, ey = 0.0, 0.0
+                if npc_id and npc_id in self.entities:
+                    ent = self.entities[npc_id]
+                    ex, ey = float(ent.x), float(ent.y)
+                event_bus.publish(GameEvent(
+                    instance_id=self._instance_id,
+                    event_type=event_type,
+                    data=data,
+                    x=ex,
+                    y=ey,
+                ))
+            except Exception:
+                pass  # never let bus errors break game logic
         
     def to_dict(self) -> Dict[str, Any]:
         """Convert state to dictionary for transmission"""

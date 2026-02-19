@@ -48,6 +48,9 @@ class ScenarioInstance:
             'max_turns': self.scenario.max_turns,
             'allowed_actions': [a.value for a in self.scenario.allowed_actions],
         })
+        # Bind the state to this instance so GameState.log_event() publishes
+        # to the correct EventBus queue once the instance becomes active.
+        self.state._instance_id = self.instance_id
 
     def apply_entities(self, entities: list, target_item_id: Optional[str] = None) -> None:
         """Populate the world with AI- or rule-generated entities and mark as active.
@@ -65,6 +68,12 @@ class ScenarioInstance:
 
         self.status = "active"
         self.started = True
+        # Register with the engine so the tick loop can process this instance.
+        try:
+            from core.engine import get_engine
+            get_engine().register_instance(self)
+        except Exception as e:
+            print(f"[ScenarioInstance] Engine registration failed: {e}")
         try:
             db.save_instance_dict(self.to_dict())
         except Exception:
@@ -158,6 +167,13 @@ class ScenarioInstanceManager:
         if not inst:
             return False
         inst.active = False
+        inst.status = "stopped"
+        # Remove from engine so the tick loop no longer processes this instance.
+        try:
+            from core.engine import get_engine
+            get_engine().unregister_instance(instance_id)
+        except Exception:
+            pass
         try:
             db.save_instance_dict(inst.to_dict())
             db.mark_instance_inactive(instance_id)
@@ -168,6 +184,11 @@ class ScenarioInstanceManager:
     def delete_instance(self, instance_id: str) -> bool:
         if instance_id in self.instances:
             del self.instances[instance_id]
+        try:
+            from core.engine import get_engine
+            get_engine().unregister_instance(instance_id)
+        except Exception:
+            pass
         try:
             db.delete_instance(instance_id)
         except Exception:

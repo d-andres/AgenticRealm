@@ -34,6 +34,11 @@ class GameSession:
         self.completed_at: Optional[datetime] = None
         self.instance_id = instance_id
 
+        # Bind this session's state to the instance so GameState.log_event()
+        # publishes events to the correct EventBus queue for the engine to pick up.
+        if instance_id and self.state._instance_id is None:
+            self.state._instance_id = instance_id
+
         # Load the scenario TEMPLATE (constraints only — no hardcoded entities)
         self.scenario = ScenarioManager.get_template(scenario_id)
         if self.scenario and existing_state is None:
