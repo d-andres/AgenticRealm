@@ -15,38 +15,37 @@ The platform's core promise — intelligent NPCs that respond dynamically to use
   - `decide(perception, decision_maker) -> dict`  *(pluggable — any provider)*
   - `act(action, world_state) -> dict`
 - [ ] NPC roles and their behaviors are defined by the scenario template and generated per instance — `SystemAgent` must be generic enough to represent any role
-- [ ] Rule-based decision-maker (baseline — deterministic, no LLM):
-  - Driven by the NPC's generated attributes (role type, personality, goal) from `ScenarioInstance`
-  - Used for testing before hooking in OpenAI/Anthropic
-- [ ] Store generated NPC instances inside `ScenarioInstance` alongside `GameState`
-- [ ] NPC state: position, inventory, `trust_levels[agent_id]`, generated role attributes
+- [x] Rule-based decision-maker (baseline — deterministic, no LLM):
+  - `_rule_based_decision_maker` implemented in `scenarios/generator.py`
+- [x] Store generated NPC instances inside `ScenarioInstance` alongside `GameState`
+- [x] NPC state: position, inventory, `trust_levels[agent_id]`, generated role attributes
+  - Trust delta applied per tick via `engine._apply_npc_update()`; full inventory mutation pending
 
 ### 2. Scenario Generator Parsers
 
-Stubs exist in `scenarios/generator.py` — implement the actual parsing:
+Parsers implemented in `scenarios/generator.py`:
 
-- [ ] `_parse_generated_stores()` — convert AI output → `GeneratedStore` objects
-- [ ] `_parse_generated_npcs()` — convert AI output → `GeneratedNPC` objects
-- [ ] `_assign_items_to_stores()` — distribute items across store inventories
-- [ ] Wire instance creation endpoint to call `ScenarioGenerator` with template
+- [x] `_parse_generated_stores()` — converts AI output → `GeneratedStore` objects
+- [x] `_parse_generated_npcs()` — converts AI output → `GeneratedNPC` objects
+- [x] `_assign_items_to_stores()` — distributes items across store inventories
+- [x] Wire instance creation endpoint to call `ScenarioGenerator` with template
 
 ### 3. Engine Orchestration for Market Actions
 
-- [ ] Connect `core/engine.py` to instance action pipeline:
-  - Parse action type from request
-  - Validate action against world rules defined by the scenario template
-  - Execute user action + update state
-  - Broadcast event to relevant NPCs (`perceive`)
-  - Run each NPC's `decide` + `act`
-  - Return combined state + all events
+- [x] Event Bus (`core/event_bus.py`) — `GameState.log_event()` publishes `GameEvent`; engine drains per tick
+- [x] NPC AI Reaction Phase — engine groups queued events by NPC, dispatches `npc_reaction` to AI agent
+- [x] NPC Autonomous Phase — `npc_idle` dispatched every 30 ticks per NPC; `asyncio.wait_for` 8 s cap
+- [x] `_apply_npc_update()` — writes `trust_delta`, `mood`, `last_ai_message`, `patrol_target` to NPC entity
+- [ ] Connect full action pipeline: validate action against template `ActionType` list → execute → return combined state
 - [ ] Action handlers: one per `ActionType` defined in the scenario template
-- [ ] Trust dynamics — every action updates `npc.trust_levels[agent_id]`
+- [ ] Pricing and hire/steal outcome calculations based on NPC-generated attributes
 
 ---
 
 ## HIGH — Core Platform Features
 
-- [ ] NPC state updates on each engine tick (position, inventory, trust)
+- [ ] `SystemAgent` base class — `perceive → decide → act` loop driven by generated NPC attributes
+- [ ] Full action-outcome calculations (pricing multipliers, hire success rates, steal risk)
 - [ ] Negotiation feedback — explain why offers were accepted or rejected
 - [ ] SSE / WebSocket push for live NPC state (replace polling)
 - [ ] Leaderboard persistence — store completed instance game outcomes and strategy analysis
@@ -77,10 +76,12 @@ Stubs exist in `scenarios/generator.py` — implement the actual parsing:
 
 **Current State**
 - Backend fully reorganized: `scenarios/`, `store/`, `routes/` packages; `main.py` is a thin entry point
-- Scenario instances persist via SQLite; Postgres migration deferred until generation works
-- `ScenarioGenerator` parsers are stubs returning empty lists — generation flow not yet connected
+- Scenario instances persist via SQLite; `generate_world_entities()` generates stores, NPCs, items on creation (rule-based fallback, ~0.5 s)
+- `core/event_bus.py` — pub/sub `GameEvent` queue; `GameState.log_event()` publishes when `_instance_id` is set
+- `core/engine.py` — `_instances` registry; Reaction Phase dispatches `npc_reaction` per NPC when events queued; Autonomous Phase dispatches `npc_idle` every 30 ticks; all AI calls are async and timeout-guarded
+- Both OpenAI and Anthropic NPC_ADMIN agents implement `npc_reaction` and `npc_idle`
 - Feed store and analytics work; keep backward-compatible while adding SSE
-- Frontend expects WebSocket but backend has none — add once engine orchestration is solid
+- Frontend expects WebSocket but backend has none — add once action pipeline is solid
 
 **Architecture Constraints**
 - `scenarios/__init__.py` intentionally does NOT import from `instances.py` (prevents eager DB init)

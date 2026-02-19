@@ -66,18 +66,25 @@ generator = ScenarioGenerator(decision_maker=your_choice)
 │  routes/feed.py        — event feed                         │
 └──────────┬─────────────────────────┬───────────────────────┘
            │                         │
-  ┌────────▼────────┐       ┌────────▼────────────┐
-  │  core/engine.py │       │  ai_agents/          │
-  │  Async tick loop│       │  OpenAI / Anthropic  │
-  │  orchestrates   │       │  system NPCs         │
-  │  all agents     │       └─────────────────────┘
-  └────────┬────────┘
-           │
-  ┌────────▼────────────────────────────────────────────╮
-  │  Scenario Instances  (scenarios/instances.py)   │
-  │  Always-on persistent worlds + agent states      │
-  │  Persisted to SQLite across server restarts       │
-  └─────────────────────────────────────────────────┘
+  ┌────────▼────────────────────────────────────────────┐
+  │  core/engine.py  —  instance registry + tick loop   │
+  │  Reaction Phase: drain EventBus → npc_reaction AI   │
+  │  Autonomous Phase (every 30 ticks): npc_idle AI      │
+  │  AI calls capped at 8 s via asyncio.wait_for         │
+  └──────────┬──────────────────────────┬───────────────┘
+             │                          │
+  ┌──────────▼──────────┐   ┌──────────▼─────────────┐
+  │  core/event_bus.py  │   │  ai_agents/             │
+  │  Per-instance deque │   │  OpenAI / Anthropic     │
+  │  GameEvent pub/sub  │   │  npc_reaction + npc_idle │
+  └──────────┬──────────┘   └────────────────────────┘
+             │
+  ┌──────────▼──────────────────────────────────────────┐
+  │  Scenario Instances  (scenarios/instances.py)        │
+  │  Always-on persistent worlds + agent states          │
+  │  Registered with engine on creation; state publishes │
+  │  GameEvents; persisted to SQLite across restarts     │
+  └─────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -95,8 +102,9 @@ generator = ScenarioGenerator(decision_maker=your_choice)
 | `store/agent_store.py` | In-memory user agent registry (`AgentStore`) |
 | `store/feed.py` | Bounded in-memory event log (`FeedStore`) |
 | `store/db.py` | SQLite helpers — `init_db`, `save_instance`, `load_instances` |
-| `core/engine.py` | `GameEngine` — async tick loop, broadcasts events to registered callbacks |
-| `core/state.py` | `GameState`, `Entity` — pure data models for world state |
+| `core/engine.py` | `GameEngine` — async tick loop, `_instances` registry, Reaction + Autonomous NPC AI phases, `get_engine()`/`set_engine()` singleton |
+| `core/event_bus.py` | `GameEvent` dataclass + `EventBus` — fire-and-forget pub/sub; per-instance deque queues drained each tick |
+| `core/state.py` | `GameState`, `Entity` — world state models; `log_event()` publishes `GameEvent` to bus when `_instance_id` is set |
 | `ai_agents/interfaces.py` | `AIAgent` abstract base, `AIAgentRequest/Response`, `AgentRole` enum |
 | `ai_agents/agent_pool.py` | Global pool — register/unregister/request across providers |
 | `ai_agents/openai_agents.py` | OpenAI provider implementation |
@@ -166,22 +174,25 @@ When an instance is created from this template, the generator produces unique en
 
 **Available Actions**: `observe`, `move`, `talk`, `negotiate`, `buy`, `hire`, `steal`, `trade`
 
-> **Note**: NPC behavior and dynamic world features (trust, pricing, action outcomes) are planned but not yet implemented. See [TODO.md](TODO.md).
+> **NPC AI**: NPC reaction and autonomous idle behavior are implemented — the engine's Reaction Phase fires `npc_reaction` when player events are queued; the Autonomous Phase fires `npc_idle` every 30 ticks. Results (trust delta, mood, dialogue) are applied asynchronously without blocking the player's HTTP response. Full action-outcome calculations (pricing, hire success rates) remain on the roadmap — see [TODO.md](TODO.md).
 
 ---
 
 ## Implementation Roadmap
 
-### Phase 1 — System Agent Framework *(CRITICAL)*
-- `SystemAgent` base class with `perceive → decide → act` loop
-- NPC roles and behaviors are defined by generated instance attributes — `SystemAgent` must be generic, not role-specific
-- Rule-based decision-maker (baseline, no LLM) driven by each NPC's generated attributes
-- Trust dynamics wired into engine
+### Phase 1 — System Agent Framework *(PARTIALLY COMPLETE)*
+- ✅ Rule-based decision-maker (baseline, no LLM) — `_rule_based_decision_maker` in `scenarios/generator.py`
+- ✅ Procedural world generation — `generate_world_entities()` produces unique stores, NPCs, items per instance
+- ✅ NPC AI reaction/idle — `npc_reaction` + `npc_idle` implemented in both OpenAI and Anthropic agents
+- ✅ Non-blocking AI pipeline — `core/event_bus.py` + engine Reaction/Autonomous Phases; player HTTP requests never blocked
+- ✅ Trust delta applied per tick — `_apply_npc_update()` writes `trust_delta`, `mood`, `last_ai_message` to NPC entity
+- [ ] `SystemAgent` base class with `perceive → decide → act` loop
+- [ ] Generic NPC role resolution at runtime from generated instance attributes
 
 ### Phase 2 — Dynamic World State
-- NPC state updates on each tick (position, inventory, trust)
-- Action outcome calculations based on NPC-generated attributes and world state
-- NPC action feedback — explain why actions were accepted/rejected
+- [ ] Action outcome calculations based on NPC-generated attributes (pricing, hire success, steal risk)
+- [ ] NPC action feedback — explain why offers were accepted/rejected
+- [ ] NPC position updates on each tick (patrol targets from `npc_idle`)
 
 ### Phase 3 — Real-Time Communication
 - Server-Sent Events (SSE) or WebSocket for live state push (replace polling)
@@ -201,6 +212,8 @@ When an instance is created from this template, the generator produces unique en
 |---|---|
 | Templates vs. instances | Templates define fair rules; AI generates unique worlds per instance — no two games are identical |
 | Pluggable decision-maker | Decouple generation/NPC logic from provider — swap rule-based → LLM without changing engine |
+| Event Bus (fire-and-forget) | `GameState.log_event()` publishes synchronously; engine drains asynchronously — zero HTTP blocking |
+| AI calls on event queue only | Reaction Phase only runs when events are queued; Autonomous Phase rate-limited to 30-tick interval — controls LLM cost |
 | `scenarios/__init__.py` does not import `instances.py` | Prevents eager DB init as a side-effect of unrelated imports |
 | Routes carry no prefix in `APIRouter()` | Prefix set exclusively in `main.py` `include_router()` — single source of truth |
 | In-memory stores + SQLite | Fast iteration now; SQLite only for instance persistence across restarts; Postgres migration deferred |

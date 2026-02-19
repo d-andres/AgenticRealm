@@ -83,6 +83,8 @@ Save the `agent_id`.
 
 Instances are always-on persistent worlds. Requires `x-admin-token` header (default: `dev-token`).
 
+World generation runs as a background task — the response returns immediately with `status: "pending"`, then transitions to `"generating"` and finally `"active"` within ~1 second.
+
 ```bash
 curl -X POST http://localhost:8000/api/v1/scenarios/market_square/instances \
   -H "Content-Type: application/json" \
@@ -98,6 +100,8 @@ Response:
   "status": "active"
 }
 ```
+
+> The instance status transitions `pending → generating → active`. Poll `GET /api/v1/scenarios/instances/{instance_id}` to confirm `status == "active"` before joining.
 
 Save the `instance_id`.
 
@@ -241,7 +245,7 @@ print(requests.get(f"{BASE}/analytics/agent/{agent_id}").json())
 
 ## AI Agent Framework (LLM System Agents)
 
-System agents (OpenAI/Anthropic) can be registered to power NPC behavior.
+System agents (OpenAI/Anthropic) can be registered to power NPC behavior. Once registered, the engine's tick loop automatically dispatches `npc_reaction` requests when player actions occur, and `npc_idle` requests every ~30 seconds per NPC for autonomous behavior (patrol, mood changes, dialogue updates). All AI calls are fire-and-forget — they never block a player's action response.
 
 ```bash
 # Check pool health

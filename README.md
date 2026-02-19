@@ -105,7 +105,8 @@ AgenticRealm/
 │   │   ├── analytics.py      # /api/v1/leaderboards/*, /api/v1/analytics/*
 │   │   └── ai_agents.py      # /api/v1/ai-agents/*
 │   ├── core/
-│   │   ├── engine.py         # Async game engine tick loop
+│   │   ├── engine.py         # Async game engine — instance registry + NPC AI orchestration
+│   │   ├── event_bus.py      # Pub/sub event queue (GameEvent, per-instance deques)
 │   │   └── state.py          # GameState + Entity models
 │   ├── ai_agents/
 │   │   ├── agent_pool.py     # Agent pool management
