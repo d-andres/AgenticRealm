@@ -156,26 +156,17 @@ Admin endpoints (`/instances/stop`, `/instances` DELETE, instance creation) requ
 
 ---
 
-## Market Square Scenario
+## Example Scenario: Market Square
 
 **`market_square`** — the platform's first scenario template.
 
-**Objective**: Obtain a target item held by a corrupt shopkeeper using limited gold.
+**Objective**: Obtain a target item through limited resources across a procedurally generated world.
 
-**System AI Agent Roles**
-
-| NPC Role | Function | System AI Behavior |
-|---|---|---|
-| Corrupt Shopkeeper | Holds target item | Resists negotiation, tracks trust, guards inventory |
-| City Guard | Patrols market | Detects theft, can be bribed |
-| Honest Shopkeepers | Alternative goods | React to haggling, adjust prices by demand |
-| Hired Thief | Steals (if hired) | Calculates risk, refuses with guards present |
-| Merchant Helper | Facilitates trades | Provides market intelligence, suggests deals |
-| Information Broker | Reveals secrets | Shares guard schedules, pricing info |
+When an instance is created from this template, the generator produces unique entities — their roles, personalities, goals, and relationships are all AI-generated attributes stored on the `ScenarioInstance`. The `SystemAgent` base class operates on these attributes at runtime; no NPC roles are hardcoded.
 
 **Available Actions**: `observe`, `move`, `talk`, `negotiate`, `buy`, `hire`, `steal`, `trade`
 
-> **Note**: NPC behavior and dynamic world features (trust, pricing, theft probability) are planned but not yet implemented. See [TODO.md](TODO.md).
+> **Note**: NPC behavior and dynamic world features (trust, pricing, action outcomes) are planned but not yet implemented. See [TODO.md](TODO.md).
 
 ---
 
@@ -183,14 +174,14 @@ Admin endpoints (`/instances/stop`, `/instances` DELETE, instance creation) requ
 
 ### Phase 1 — System Agent Framework *(CRITICAL)*
 - `SystemAgent` base class with `perceive → decide → act` loop
-- NPC implementations: `CorruptShopkeeper`, `CityGuard`, `HonestShopkeeper`, `HiredThief`, `MerchantHelper`, `InformationBroker`
-- Rule-based decision-maker (baseline, no LLM dependency)
-- Trust dynamics and pricing multipliers wired into engine
+- NPC roles and behaviors are defined by generated instance attributes — `SystemAgent` must be generic, not role-specific
+- Rule-based decision-maker (baseline, no LLM) driven by each NPC's generated attributes
+- Trust dynamics wired into engine
 
 ### Phase 2 — Dynamic World State
 - NPC state updates on each tick (position, inventory, trust)
-- Success probability calculations for theft, negotiation, bribery
-- NPC action feedback — explain why offers were accepted/rejected
+- Action outcome calculations based on NPC-generated attributes and world state
+- NPC action feedback — explain why actions were accepted/rejected
 
 ### Phase 3 — Real-Time Communication
 - Server-Sent Events (SSE) or WebSocket for live state push (replace polling)
