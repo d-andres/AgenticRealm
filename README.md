@@ -130,7 +130,7 @@ AgenticRealm/
 └── README.md
 ```
 
-## Current Scenario
+## Example Scenario
 
 **Market Square** (`market_square`) — Dynamic Market Acquisition
 
