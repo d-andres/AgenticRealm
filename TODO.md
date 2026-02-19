@@ -14,18 +14,12 @@ The platform's core promise — intelligent NPCs that respond dynamically to use
   - `perceive(world_state, agent_context) -> dict`
   - `decide(perception, decision_maker) -> dict`  *(pluggable — any provider)*
   - `act(action, world_state) -> dict`
-- [ ] Implement Market Square NPC agents (`backend/agents/market_square/`):
-  - `CorruptShopkeeper` — resists negotiation, tracks trust, defends target item
-  - `CityGuard` — patrols, detects theft, bribeable
-  - `HonestShopkeeper` — reacts to haggling, demand-based pricing
-  - `HiredThief` — calculates success probability, refuses suicidal jobs
-  - `MerchantHelper` — facilitates trades, provides intel
-  - `InformationBroker` — sells guard schedules, pricing info, vulnerabilities
+- [ ] NPC roles and their behaviors are defined by the scenario template and generated per instance — `SystemAgent` must be generic enough to represent any role
 - [ ] Rule-based decision-maker (baseline — deterministic, no LLM):
-  - Each NPC type has hardcoded decision logic
+  - Driven by the NPC's generated attributes (role type, personality, goal) from `ScenarioInstance`
   - Used for testing before hooking in OpenAI/Anthropic
-- [ ] Store NPC instances inside `ScenarioInstance` alongside `GameState`
-- [ ] NPC state: position, inventory, `trust_levels[agent_id]`, mood flag
+- [ ] Store generated NPC instances inside `ScenarioInstance` alongside `GameState`
+- [ ] NPC state: position, inventory, `trust_levels[agent_id]`, generated role attributes
 
 ### 2. Scenario Generator Parsers
 
@@ -45,7 +39,7 @@ Stubs exist in `scenarios/generator.py` — implement the actual parsing:
   - Broadcast event to relevant NPCs (`perceive`)
   - Run each NPC's `decide` + `act`
   - Return combined state + all events
-- [ ] Action handlers: `handle_move`, `handle_negotiate`, `handle_buy`, `handle_hire`, `handle_steal`, `handle_trade`
+- [ ] Action handlers: one per `ActionType` defined in the scenario template
 - [ ] Trust dynamics — every action updates `npc.trust_levels[agent_id]`
 
 ---
@@ -55,15 +49,15 @@ Stubs exist in `scenarios/generator.py` — implement the actual parsing:
 - [ ] NPC state updates on each engine tick (position, inventory, trust)
 - [ ] Negotiation feedback — explain why offers were accepted or rejected
 - [ ] SSE / WebSocket push for live NPC state (replace polling)
-- [ ] Leaderboard persistence — store market game outcomes and strategy analysis
-- [ ] Tests for market interactions (negotiation, theft, hiring, trading flows)
+- [ ] Leaderboard persistence — store completed instance game outcomes and strategy analysis
+- [ ] Tests for scenario instance interactions (agent actions, NPC responses, action validation)
 - [ ] Instance snapshot improvements — persist NPC trust/inventory changes across restarts
 
 ---
 
 ## MEDIUM — Admin & Usability
 
-- [ ] System prompt library at `backend/prompts/market_square/` — NPC decision templates
+- [ ] System prompt library at `backend/prompts/` — per-scenario NPC decision templates (generated at instance creation)
 - [ ] Decision-maker factory — swap rule-based → OpenAI → Anthropic via config
 - [ ] Admin CLI — reset NPC trust, replenish inventory, inspect instance state
 - [ ] Trust level and pricing visualization in frontend dashboard
