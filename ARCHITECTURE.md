@@ -105,10 +105,10 @@ generator = ScenarioGenerator(decision_maker=your_choice)
 | `core/engine.py` | `GameEngine` — async tick loop, `_instances` registry, Reaction + Autonomous NPC AI phases, `get_engine()`/`set_engine()` singleton |
 | `core/event_bus.py` | `GameEvent` dataclass + `EventBus` — fire-and-forget pub/sub; per-instance deque queues drained each tick |
 | `core/state.py` | `GameState`, `Entity` — world state models; `log_event()` publishes `GameEvent` to bus when `_instance_id` is set |
-| `ai_agents/interfaces.py` | `AIAgent` abstract base, `AIAgentRequest/Response`, `AgentRole` enum |
-| `ai_agents/agent_pool.py` | Global pool — register/unregister/request across providers |
-| `ai_agents/openai_agents.py` | OpenAI provider implementation |
-| `ai_agents/anthropic_agents.py` | Anthropic provider implementation |
+| `ai_agents/interfaces.py` | `AIAgent` abstract base, `AIAgentRequest/Response`, `AgentRole` enum; role-specific interfaces (`NPCAdminAgentInterface`, etc.) |
+| `ai_agents/agent_pool.py` | Global pool — register/unregister/request across providers; round-robin load balancing when multiple agents share a role; all agents run concurrently via `asyncio` |
+| `ai_agents/openai_agents.py` | OpenAI provider — `OpenAIScenarioGeneratorAgent`, `OpenAINPCAdminAgent` with `generate_stores`, `generate_npcs`, `npc_reaction`, `npc_idle` |
+| `ai_agents/anthropic_agents.py` | Anthropic provider — same actions as OpenAI agents; swap provider without changing engine code |
 
 ---
 
@@ -164,6 +164,45 @@ Admin endpoints (`/instances/stop`, `/instances` DELETE, instance creation) requ
 
 ---
 
+## AI Agent Roles
+
+All roles are defined in `ai_agents/interfaces.py` as the `AgentRole` enum.  The agent pool routes requests to the correct role automatically.
+
+| Role | Value | Responsibility |
+|---|---|---|
+| `SCENARIO_GENERATOR` | `scenario_generator` | Generates unique stores, NPCs, and items for new instances |
+| `NPC_ADMIN` | `npc_admin` | Drives NPC reactions (`npc_reaction`) and autonomous idle behaviour (`npc_idle`) |
+| `GAME_MASTER` | `game_master` | Adjudicates complex game rule outcomes |
+| `JUDGE` | `judge` | Validates player action legality |
+| `STORYTELLER` | `storyteller` | Generates narrative descriptions and world flavour |
+| `CUSTOM` | `custom` | Any user-defined role |
+
+Multiple agents of the same role can be registered simultaneously — requests are distributed round-robin across them.
+
+### AI Agent Request / Response Format
+
+```json
+// Request body  POST /api/v1/ai-agents/request/{role}/{action}
+{ "context": { ...role-specific fields... } }
+
+// Response
+{
+  "request_id": "uuid",
+  "agent_role": "npc_admin",
+  "success": true,
+  "result": { ...action-specific payload... },
+  "reasoning": "Agent's explanation of its decision",
+  "metadata": {
+    "agent_name": "my-agent",
+    "provider": "openai",
+    "model": "gpt-4o",
+    "tokens_used": 180
+  }
+}
+```
+
+---
+
 ## Example Scenario: Market Square
 
 **`market_square`** — the platform's first scenario template.
@@ -214,6 +253,7 @@ When an instance is created from this template, the generator produces unique en
 | Pluggable decision-maker | Decouple generation/NPC logic from provider — swap rule-based → LLM without changing engine |
 | Event Bus (fire-and-forget) | `GameState.log_event()` publishes synchronously; engine drains asynchronously — zero HTTP blocking |
 | AI calls on event queue only | Reaction Phase only runs when events are queued; Autonomous Phase rate-limited to 30-tick interval — controls LLM cost |
+| Agent pool round-robin | Multiple agents of the same role share load automatically; one agent going offline doesn't break requests |
 | `scenarios/__init__.py` does not import `instances.py` | Prevents eager DB init as a side-effect of unrelated imports |
 | Routes carry no prefix in `APIRouter()` | Prefix set exclusively in `main.py` `include_router()` — single source of truth |
 | In-memory stores + SQLite | Fast iteration now; SQLite only for instance persistence across restarts; Postgres migration deferred |

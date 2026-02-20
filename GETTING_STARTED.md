@@ -279,7 +279,90 @@ Run the example client:
 python backend/clients/ai_agent_example.py
 ```
 
-See `backend/ai_agents/README.md` for full framework documentation.
+### NPC Admin Actions
+
+Once an `npc_admin` agent is registered, the engine calls it automatically on every tick. You can also call it directly:
+
+```bash
+# Trigger NPC reaction to a player event
+curl -X POST http://localhost:8000/api/v1/ai-agents/request/npc_admin/npc_reaction \
+  -H "Content-Type: application/json" \
+  -d '{
+    "context": {
+      "npc_id": "shopkeeper_001",
+      "npc_name": "Thora the Merchant",
+      "npc_job": "shopkeeper",
+      "npc_personality": "friendly, cautious",
+      "npc_trust": 0.5,
+      "events": [{"type": "negotiate", "data": {"agent_id": "agent_abc", "offered_price": 80}}]
+    }
+  }'
+```
+
+The engine dispatches `npc_reaction` whenever events are queued for an NPC, and `npc_idle` every ~30 seconds per NPC for autonomous patrol and mood updates. Both are fire-and-forget — the player’s action response is never blocked.
+
+### AI Agent Response Format
+
+All `POST /api/v1/ai-agents/request/{role}/{action}` calls return:
+
+```json
+{
+  "request_id": "uuid",
+  "agent_role": "npc_admin",
+  "success": true,
+  "result": { "trust_delta": 0.05, "mood": "pleased", "last_ai_message": "Fair enough, I\'ll take it." },
+  "reasoning": "Player offered a reasonable price with existing trust built up.",
+  "metadata": {
+    "agent_name": "my-npc-agent",
+    "provider": "openai",
+    "model": "gpt-4o",
+    "tokens_used": 180
+  }
+}
+```
+
+### Creating a Custom Agent
+
+To add a new AI provider or custom NPC logic, subclass `AIAgent`:
+
+```python
+from ai_agents.interfaces import AIAgent, AIAgentRequest, AIAgentResponse, AgentRole
+import asyncio
+
+class MyCustomAgent(AIAgent):
+    def __init__(self, agent_name: str, config: dict):
+        super().__init__(agent_name, AgentRole.NPC_ADMIN, config)
+
+    async def connect(self) -> bool:
+        self.is_connected = True
+        return True
+
+    async def disconnect(self) -> bool:
+        self.is_connected = False
+        return True
+
+    async def handle_request(self, request: AIAgentRequest) -> AIAgentResponse:
+        # Call your own AI provider or rule-based logic here
+        result = {"mood": "neutral", "last_ai_message": "Hello traveller."}
+        return AIAgentResponse(
+            request_id=request.request_id,
+            agent_role=self.role,
+            success=True,
+            result=result,
+            reasoning="Custom logic applied."
+        )
+
+# Register it
+from ai_agents.agent_pool import get_agent_pool
+import asyncio
+
+async def register():
+    pool = await get_agent_pool()
+    agent = MyCustomAgent("my-agent", {})
+    await pool.register_agent(agent)
+
+asyncio.run(register())
+```
 
 ---
 
@@ -333,3 +416,14 @@ python3 main.py
 **Instance not found** — instances persist via SQLite; confirm the instance was created successfully before joining
 
 **Connection refused** — confirm both services are running; try `127.0.0.1` instead of `localhost`
+
+**AI agent not responding**
+- Run `GET /api/v1/ai-agents/health` to confirm at least one agent is registered for the required role
+- Check that `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` is exported in the same shell that started the backend
+- Verify the model name is correct (`gpt-4o`, `claude-3-5-sonnet-20241022`, etc.)
+- NPC AI calls are fire-and-forget — if a call times out (8 s) it is silently dropped; the player still receives the deterministic action result
+
+**NPC responses seem generic**
+- Add more detail to the `npc_data` context when registering the agent or adjust the instance’s generated NPC `personality` field
+- Higher `trust` values (written by the engine each tick) unlock better price floors and dialogue variety
+- The engine’s Autonomous Phase fires `npc_idle` every 30 ticks — if no NPC_ADMIN agent is registered nothing breaks, it just skips
