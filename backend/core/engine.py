@@ -194,6 +194,9 @@ class GameEngine:
                         "npc_job":         npc.properties.get("job", "unknown"),
                         "npc_personality": npc.properties.get("personality", "neutral"),
                         "npc_trust":       npc.properties.get("trust", 0.5),
+                        "npc_health":      npc.properties.get("health", npc.properties.get("max_health", 100)),
+                        "npc_max_health":  npc.properties.get("max_health", 100),
+                        "npc_status":      npc.properties.get("status", "alive"),
                         "events":          [{"type": ev.event_type, "data": ev.data} for ev in events],
                         "instance_id":     instance.instance_id,
                     },
@@ -224,6 +227,9 @@ class GameEngine:
                         "npc_personality": npc.properties.get("personality", "neutral"),
                         "npc_trust":       npc.properties.get("trust", 0.5),
                         "npc_mood":        npc.properties.get("mood", "neutral"),
+                        "npc_health":      npc.properties.get("health", npc.properties.get("max_health", 100)),
+                        "npc_max_health":  npc.properties.get("max_health", 100),
+                        "npc_status":      npc.properties.get("status", "alive"),
                         "world_turn":      self.turn,
                         "instance_id":     instance.instance_id,
                     },
@@ -248,10 +254,12 @@ class GameEngine:
         Apply AI-returned NPC updates to the live world state.
 
         The AI may return any subset of these keys:
-          trust_delta  (float)  — added to current trust, clamped [0, 1]
-          mood         (str)    — replaces current mood
-          last_ai_message (str) — dialogue line stored for next player observe
-          patrol_target   (str) — entity_id the NPC is moving toward
+          trust_delta     (float)  — added to current trust, clamped [0, 1]
+          health_delta    (float)  — added to current health, clamped [0, max_health];
+                                     reaching 0 sets status to 'incapacitated'
+          mood            (str)    — replaces current mood
+          last_ai_message (str)    — dialogue line stored for next player observe
+          patrol_target   (str)    — entity_id the NPC is moving toward
         """
         npc = instance.state.entities.get(npc_id)
         if not npc:
@@ -261,6 +269,22 @@ class GameEngine:
         if trust_delta is not None:
             current = npc.properties.get("trust", 0.5)
             npc.properties["trust"] = round(max(0.0, min(1.0, current + float(trust_delta))), 3)
+
+        health_delta = result.get("health_delta")
+        if health_delta is not None:
+            max_hp  = npc.properties.get("max_health", 100.0)
+            current_hp = npc.properties.get("health", max_hp)
+            new_hp = round(max(0.0, min(float(max_hp), current_hp + float(health_delta))), 1)
+            npc.properties["health"] = new_hp
+            if new_hp <= 0 and npc.properties.get("status") != "incapacitated":
+                npc.properties["status"] = "incapacitated"
+                # Preserve any AI message; fall back to a generic collapse line.
+                if "last_ai_message" not in result:
+                    npc.properties["last_ai_message"] = (
+                        f"{npc.properties.get('name', npc_id)} collapses."
+                    )
+            elif new_hp > 0 and npc.properties.get("status") == "incapacitated":
+                npc.properties["status"] = "alive"
 
         for key in ("mood", "last_ai_message", "patrol_target"):
             if key in result:

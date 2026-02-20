@@ -418,23 +418,28 @@ class OpenAINPCAdminAgent(NPCAdminAgentInterface):
 
     async def _npc_reaction(self, context: Dict[str, Any]) -> Dict:
         """React to one or more player events near this NPC (Reaction Phase)."""
-        npc_name = context.get("npc_name", "NPC")
-        npc_job  = context.get("npc_job", "unknown")
-        npc_pers = context.get("npc_personality", "neutral")
+        npc_name  = context.get("npc_name", "NPC")
+        npc_job   = context.get("npc_job", "unknown")
+        npc_pers  = context.get("npc_personality", "neutral")
         npc_trust = context.get("npc_trust", 0.5)
-        events   = context.get("events", [])
+        npc_hp    = context.get("npc_health", 100)
+        npc_maxhp = context.get("npc_max_health", 100)
+        npc_status = context.get("npc_status", "alive")
+        events    = context.get("events", [])
         events_desc = "; ".join(
             f"{ev.get('type','event')}: {ev.get('data',{})}" for ev in events
         )
         prompt = (
             f"You are {npc_name}, a {npc_job}. Personality: {npc_pers}. "
-            f"Current trust in the player: {npc_trust:.1f}/1.0.\n\n"
+            f"Current trust in the player: {npc_trust:.1f}/1.0. "
+            f"Health: {npc_hp}/{npc_maxhp}. Status: {npc_status}.\n\n"
             f"Events that just occurred near you: {events_desc}\n\n"
             "How does this change your attitude? Return JSON ONLY:\n"
             "{\n"
             '  "trust_delta": <float -0.3 to 0.3>,\n'
             '  "mood": "<one word>",\n'
-            '  "last_ai_message": "<brief in-character reaction, 1 sentence>"\n'
+            '  "last_ai_message": "<brief in-character reaction, 1 sentence>",\n'
+            '  "health_delta": <optional float, only include for violent/aggressive events>\n'
             "}"
         )
         raw = await self._call_api(

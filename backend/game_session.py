@@ -294,6 +294,14 @@ class GameSession:
         entity_id = params.get('npc_id') or params.get('store_id') or params.get('entity_id')
         return self.state.entities.get(entity_id) if entity_id else None
 
+    @staticmethod
+    def _is_incapacitated(entity: 'Entity') -> bool:
+        """Return True if an NPC has been incapacitated (health ≤ 0 or status 'incapacitated')."""
+        return (
+            entity.properties.get('status') == 'incapacitated'
+            or entity.properties.get('health', 1) <= 0
+        )
+
     def _handle_talk(self, params: Dict) -> Tuple[bool, str, Dict]:
         """Initiate a conversation with an NPC entity.
 
@@ -310,6 +318,10 @@ class GameSession:
         npc = self._resolve_npc(params)
         if not npc:
             return False, "Target entity not found. Provide 'npc_id'.", {}
+        if self._is_incapacitated(npc):
+            return False, (
+                f"{npc.properties.get('name', npc.id)} is incapacitated and cannot respond."
+            ), {'npc_id': npc.id, 'npc_status': 'incapacitated'}
         message = params.get('message', '')
         self.state.log_event('talk', {
             'agent_id': self.agent_id,
@@ -336,6 +348,10 @@ class GameSession:
         npc = self._resolve_npc(params)
         if not npc:
             return False, "Target store/NPC not found. Provide 'store_id' or 'npc_id'.", {}
+        if self._is_incapacitated(npc):
+            return False, (
+                f"{npc.properties.get('name', npc.id)} is incapacitated and cannot negotiate."
+            ), {'npc_id': npc.id, 'npc_status': 'incapacitated'}
         item_id = params.get('item_id')
         offered_price = params.get('offered_price')
         if item_id is None or offered_price is None:
@@ -414,6 +430,10 @@ class GameSession:
         cost = npc.properties.get('hiring_cost')
         if cost is None:
             return False, f"'{npc.id}' is not available for hire.", {}
+        if self._is_incapacitated(npc):
+            return False, (
+                f"{npc.properties.get('name', npc.id)} is incapacitated and cannot be hired."
+            ), {'npc_id': npc.id, 'npc_status': 'incapacitated'}
         # NPCs who trust the agent more are willing to lower their fee (up to 20% off)
         trust = npc.properties.get('trust', 0.5)
         effective_cost = round(cost * max(0.5, 1.0 - 0.2 * trust))
@@ -449,6 +469,7 @@ class GameSession:
             if e.type == 'npc'
             and e.properties.get('job') == 'guard'
             and e.properties.get('hired_by') != self.agent_id
+            and not self._is_incapacitated(e)
             and ((e.x - store.x) ** 2 + (e.y - store.y) ** 2) ** 0.5 < 100
         ]
         # Higher trust with the store owner means they're less vigilant
@@ -490,6 +511,10 @@ class GameSession:
         receive_item = npc_inv.get(receive_item_id)
         if not receive_item:
             return False, f"NPC doesn't have item '{receive_item_id}'.", {}
+        if self._is_incapacitated(npc):
+            return False, (
+                f"{npc.properties.get('name', npc.id)} is incapacitated and cannot trade."
+            ), {'npc_id': npc.id, 'npc_status': 'incapacitated'}
         # Outcome is deterministic with a trust modifier: friendly NPCs accept
         # slightly worse deals.  The engine's Reaction Phase will call
         # npc_reaction after this event, enriching the NPC's dialogue async.

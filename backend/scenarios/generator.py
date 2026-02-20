@@ -566,6 +566,15 @@ async def generate_world_entities(
         # 5. Convert to Entity objects and apply
         entities = []
 
+        # Job-based max health for NPCs: guards are tougher, civilians lighter.
+        _NPC_HEALTH_BY_JOB = {
+            "guard": 150, "soldier": 150, "warrior": 150, "bouncer": 130,
+            "thief": 70,  "spy": 70,    "smuggler": 70,  "rogue": 70,
+            "broker": 75, "fence": 75,
+            "merchant": 80, "shopkeeper": 80, "vendor": 80,
+            "healer": 90, "physician": 90,
+        }
+
         for store in stores:
             entities.append(Entity(
                 id=store.store_id,
@@ -584,6 +593,7 @@ async def generate_world_entities(
             ))
 
         for npc in npcs:
+            max_hp = _NPC_HEALTH_BY_JOB.get(npc.job.lower().split()[0], 100)
             entities.append(Entity(
                 id=npc.npc_id,
                 type="npc",
@@ -596,6 +606,9 @@ async def generate_world_entities(
                     "skills": npc.skills,
                     "trust": npc.initial_trust,
                     "hiring_cost": npc.hiring_cost,
+                    "health": float(max_hp),
+                    "max_health": float(max_hp),
+                    "status": "alive",
                     "default_response": f"{npc.name} ({npc.job}) regards you with a {npc.personality} expression.",
                 },
             ))
