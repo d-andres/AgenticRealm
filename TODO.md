@@ -53,8 +53,11 @@ Parsers implemented in `scenarios/generator.py`:
 ## HIGH — Core Platform Features
 
 - [ ] `SystemAgent` base class — `perceive → decide → act` loop driven by generated NPC attributes
-- [ ] Full action-outcome calculations (pricing multipliers, hire success rates, steal risk)
-- [ ] Negotiation feedback — explain why offers were accepted or rejected
+- [x] Trust-based pricing and outcome calculations
+  - `_handle_negotiate`, `_handle_buy`, `_handle_hire`, `_handle_steal` all read NPC `trust` property from engine tick updates
+  - See CRITICAL §3 for implementation details
+- [ ] AI-driven action outcomes — route `negotiate`, `trade`, `hire` decisions to `NPC_ADMIN` agent for authentic acceptance logic (currently deterministic with trust modifier)
+- [ ] Negotiation feedback — explain why offers were accepted or rejected (requires NPC_ADMIN response surfaced in action reply)
 - [ ] SSE / WebSocket push for live NPC state (replace polling)
 - [ ] Leaderboard persistence — store completed instance game outcomes and strategy analysis
 - [ ] Tests for scenario instance interactions (agent actions, NPC responses, action validation)
@@ -88,8 +91,10 @@ Parsers implemented in `scenarios/generator.py`:
 - `core/event_bus.py` — pub/sub `GameEvent` queue; `GameState.log_event()` publishes when `_instance_id` is set
 - `core/engine.py` — `_instances` registry; Reaction Phase dispatches `npc_reaction` per NPC when events queued; Autonomous Phase dispatches `npc_idle` every 30 ticks; all AI calls are async and timeout-guarded
 - Both OpenAI and Anthropic NPC_ADMIN agents implement `npc_reaction` and `npc_idle`
+- Action pipeline complete: `process_action` validates against `scenario.allowed_actions` (invalid actions cost 0 turns); all 8 action handlers implemented with trust-based dynamic pricing
+- `POST /instances/{instance_id}/action` route live; addressed by `(instance_id, agent_id)` pair via `get_session_by_instance_agent()`
 - Feed store and analytics work; keep backward-compatible while adding SSE
-- Frontend expects WebSocket but backend has none — add once action pipeline is solid
+- Frontend expects WebSocket but backend has none — add once SSE/push is prioritised
 
 **Architecture Constraints**
 - `scenarios/__init__.py` intentionally does NOT import from `instances.py` (prevents eager DB init)
