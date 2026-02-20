@@ -107,7 +107,17 @@ class GameSession:
         if self.turn >= self.scenario.max_turns:
             self.status = "completed"
             return False, "Maximum turns reached", {}
-        
+
+        # Validate against the scenario template's allowed action set.
+        # Checked before the turn increment so invalid actions don't cost a turn.
+        if self.scenario and self.scenario.allowed_actions:
+            _allowed = [a.value for a in self.scenario.allowed_actions]
+            if action not in _allowed:
+                return False, (
+                    f"Action '{action}' is not permitted in this scenario. "
+                    f"Allowed: {_allowed}"
+                ), {}
+
         try:
             self.turn += 1
             self.actions_taken.append({
@@ -317,16 +327,22 @@ class GameSession:
         })
         # TODO: route to NPC_ADMIN AI agent for authentic acceptance logic
         multiplier = npc.properties.get('pricing_multiplier', 1.0)
+        # trust in [0, 1]: higher trust lowers the NPC's minimum acceptable price
+        trust = npc.properties.get('trust', 0.5)
         inventory = npc.properties.get('inventory', {})
         item = inventory.get(item_id)
         if not item:
             return False, f"Item '{item_id}' not found in {npc.id}'s inventory.", {}
         base = item.get('value', 100) * multiplier
-        accepted = offered_price >= base * 0.8
+        # Trust discount: at trust=1.0 the floor drops to ~70%; at trust=0.0 it rises to ~85%
+        trust_adj = 0.15 * (trust - 0.5)   # -0.075 (hostile) … +0.075 (friendly)
+        floor = base * max(0.5, 0.8 - trust_adj)
+        accepted = offered_price >= floor
+        counter = round(floor, 0)
         return accepted, (
             f"Offer accepted at {offered_price} gold." if accepted
-            else f"Offer refused. Counter-price: {round(base, 0)} gold."
-        ), {'accepted': accepted, 'item_id': item_id, 'counter_price': round(base, 0)}
+            else f"Offer refused. Counter-price: {counter} gold."
+        ), {'accepted': accepted, 'item_id': item_id, 'counter_price': counter, 'trust': round(trust, 2)}
 
     def _handle_buy(self, params: Dict) -> Tuple[bool, str, Dict]:
         """Purchase an item from a store entity."""
@@ -341,7 +357,11 @@ class GameSession:
         item = inventory.get(item_id)
         if not item:
             return False, f"Item '{item_id}' not in store inventory.", {}
-        price = round(item.get('value', 100) * store.properties.get('pricing_multiplier', 1.0))
+        multiplier = store.properties.get('pricing_multiplier', 1.0)
+        trust = store.properties.get('trust', 0.5)
+        # Higher trust earns a small loyalty discount (up to 10% off at trust=1.0)
+        trust_adj = multiplier * (1.0 - 0.1 * (trust - 0.5))
+        price = round(item.get('value', 100) * max(0.5, trust_adj))
         gold = agent.properties.get('gold', 0)
         if gold < price:
             return False, f"Insufficient gold. Need {price}, have {gold}.", {}
@@ -369,14 +389,17 @@ class GameSession:
         cost = npc.properties.get('hiring_cost')
         if cost is None:
             return False, f"'{npc.id}' is not available for hire.", {}
+        # NPCs who trust the agent more are willing to lower their fee (up to 20% off)
+        trust = npc.properties.get('trust', 0.5)
+        effective_cost = round(cost * max(0.5, 1.0 - 0.2 * trust))
         agent = self.state.entities.get(self.agent_id)
         gold = agent.properties.get('gold', 0)
-        if gold < cost:
-            return False, f"Cannot afford. Hire cost: {cost}, have {gold}.", {}
-        agent.properties['gold'] = gold - cost
+        if gold < effective_cost:
+            return False, f"Cannot afford. Hire cost: {effective_cost}, have {gold}.", {}
+        agent.properties['gold'] = gold - effective_cost
         npc.properties['hired_by'] = self.agent_id
-        self.state.log_event('hire', {'agent_id': self.agent_id, 'npc_id': npc.id, 'cost': cost})
-        return True, f"Hired '{npc.properties.get('name', npc.id)}' for {cost} gold.", {
+        self.state.log_event('hire', {'agent_id': self.agent_id, 'npc_id': npc.id, 'cost': effective_cost})
+        return True, f"Hired '{npc.properties.get('name', npc.id)}' for {effective_cost} gold.", {
             'npc_id': npc.id, 'gold_remaining': agent.properties['gold']
         }
 
@@ -394,15 +417,22 @@ class GameSession:
             return False, f"Item '{item_id}' not in store inventory.", {}
         # Success chance based on guard presence; NPC_ADMIN will refine this
         # TODO: route to NPC_ADMIN AI agent for authentic outcome resolution
-        guards = [e for e in self.state.entities.values() if e.type == 'npc'
-                  and e.properties.get('job') == 'guard'
-                  and ((e.x - store.x) ** 2 + (e.y - store.y) ** 2) ** 0.5 < 100]
-        success_chance = max(0.1, 0.7 - len(guards) * 0.2)
+        # Guards hired by this agent have been bribed/distracted — they don't count
+        alert_guards = [
+            e for e in self.state.entities.values()
+            if e.type == 'npc'
+            and e.properties.get('job') == 'guard'
+            and e.properties.get('hired_by') != self.agent_id
+            and ((e.x - store.x) ** 2 + (e.y - store.y) ** 2) ** 0.5 < 100
+        ]
+        # Higher trust with the store owner means they're less vigilant
+        trust = store.properties.get('trust', 0.5)
+        success_chance = max(0.1, 0.7 - len(alert_guards) * 0.2 + trust * 0.1)
         import random
         success = random.random() < success_chance
         self.state.log_event('steal_attempt', {
             'agent_id': self.agent_id, 'store_id': store.id,
-            'item_id': item_id, 'success': success, 'guards_nearby': len(guards)
+            'item_id': item_id, 'success': success, 'guards_nearby': len(alert_guards)
         })
         if success:
             agent = self.state.entities.get(self.agent_id)
@@ -576,6 +606,17 @@ class GameSessionManager:
             session.completed_at = datetime.now()
             return True
         return False
+
+    def get_session_by_instance_agent(self, instance_id: str, agent_id: str) -> 'Optional[GameSession]':
+        """Find the active game session for a given (instance_id, agent_id) pair.
+
+        Used by the ``POST /instances/{instance_id}/action`` route to locate the
+        correct session without the caller needing to track their ``game_id``.
+        """
+        for session in self.sessions.values():
+            if session.instance_id == instance_id and session.agent_id == agent_id:
+                return session
+        return None
 
 # Global session manager
 session_manager = GameSessionManager()

@@ -36,9 +36,17 @@ Parsers implemented in `scenarios/generator.py`:
 - [x] NPC AI Reaction Phase — engine groups queued events by NPC, dispatches `npc_reaction` to AI agent
 - [x] NPC Autonomous Phase — `npc_idle` dispatched every 30 ticks per NPC; `asyncio.wait_for` 8 s cap
 - [x] `_apply_npc_update()` — writes `trust_delta`, `mood`, `last_ai_message`, `patrol_target` to NPC entity
-- [ ] Connect full action pipeline: validate action against template `ActionType` list → execute → return combined state
-- [ ] Action handlers: one per `ActionType` defined in the scenario template
-- [ ] Pricing and hire/steal outcome calculations based on NPC-generated attributes
+- [x] Connect full action pipeline: validate action against template `ActionType` list → execute → return combined state
+  - `process_action` validates against `scenario.allowed_actions` before turn increment; invalid actions cost 0 turns
+  - `POST /instances/{instance_id}/action` route added to `routes/scenarios.py`
+  - `GameSessionManager.get_session_by_instance_agent()` added for route → session lookup
+- [x] Action handlers: one per `ActionType` defined in the scenario template
+  - `move`, `observe`, `talk`, `negotiate`, `buy`, `hire`, `steal`, `trade` all implemented in `game_session.py`
+- [x] Pricing and hire/steal outcome calculations based on NPC-generated attributes
+  - `_handle_negotiate`: price floor adjusts ±7.5% based on NPC `trust` property
+  - `_handle_buy`: effective price adjusts up to ±5% based on store `trust`
+  - `_handle_hire`: hire cost discounted up to 20% at max trust
+  - `_handle_steal`: hired guard neutralised; trust adds +10% success bonus
 
 ---
 

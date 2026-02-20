@@ -9,7 +9,7 @@ before parameterised paths (/{scenario_id}) so FastAPI resolves them correctly.
 
 from fastapi import APIRouter, HTTPException, Header, Query, BackgroundTasks
 from typing import List
-from models import ScenarioResponse
+from models import ScenarioResponse, ActionRequest, ActionResponse
 from store.agent_store import agent_store
 from scenarios.templates import ScenarioManager
 from scenarios.instances import scenario_instance_manager
@@ -135,6 +135,57 @@ async def join_scenario_instance(instance_id: str, agent_id: str = Query(...)):
         'scenario_id': instance.scenario_id,
         'agent_id': agent_id,
     }
+
+
+@router.post("/instances/{instance_id}/action", response_model=ActionResponse,
+             summary="Submit an action in a scenario instance")
+async def instance_action(
+    instance_id: str,
+    request: ActionRequest,
+    agent_id: str = Query(..., description="Agent ID that previously joined this instance"),
+):
+    """
+    Submit an action for an agent within a running scenario instance.
+
+    ``agent_id`` must match an agent that has already joined this instance via
+    ``POST /instances/{instance_id}/join``.  The action is routed to that
+    agent's game session and processed immediately — NPC AI reactions are
+    dispatched asynchronously by the engine on the next tick.
+
+    This endpoint is equivalent to ``POST /api/v1/games/{game_id}/action`` but
+    addressed by instance + agent rather than game_id, which is more natural
+    for agents that track their ``instance_id`` rather than ``game_id``.
+    """
+    instance = scenario_instance_manager.get_instance(instance_id)
+    if not instance:
+        raise HTTPException(status_code=404, detail="Instance not found")
+
+    if getattr(instance, 'status', 'active') != 'active':
+        raise HTTPException(
+            status_code=409,
+            detail=f"Instance is not active (status: {instance.status}). "
+                   "Poll GET /instances/{instance_id} until status is 'active'."
+        )
+
+    session = session_manager.get_session_by_instance_agent(instance_id, agent_id)
+    if not session:
+        raise HTTPException(
+            status_code=404,
+            detail="No active session found for this agent in this instance. "
+                   "Join the instance first via POST /instances/{instance_id}/join."
+        )
+
+    params = dict(request.params or {})
+    if request.prompt_summary:
+        params['prompt_summary'] = request.prompt_summary
+
+    success, message, state_update = session.process_action(request.action, params)
+    return ActionResponse(
+        success=success,
+        message=message,
+        state_update=state_update,
+        turn=session.turn,
+    )
 
 
 # ---- Parameterised template paths (must follow all literals) ----------
