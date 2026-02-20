@@ -295,7 +295,18 @@ class GameSession:
         return self.state.entities.get(entity_id) if entity_id else None
 
     def _handle_talk(self, params: Dict) -> Tuple[bool, str, Dict]:
-        """Initiate a conversation with an NPC entity."""
+        """Initiate a conversation with an NPC entity.
+
+        Returns the NPC's most recent AI-generated dialogue if the engine has
+        already run a ``npc_reaction`` or ``npc_idle`` cycle for this NPC since
+        the last player interaction.  If no AI message exists yet the NPC's
+        ``default_response`` or a generic acknowledgement is returned.
+
+        The ``talk`` event is published to the EventBus so the engine will call
+        ``npc_reaction`` on the next tick, updating ``last_ai_message`` for the
+        NPC.  Players will see the fresh AI dialogue on their next ``talk`` or
+        ``observe`` action.
+        """
         npc = self._resolve_npc(params)
         if not npc:
             return False, "Target entity not found. Provide 'npc_id'.", {}
@@ -305,10 +316,20 @@ class GameSession:
             'npc_id': npc.id,
             'message': message
         })
-        # TODO: route to NPC_ADMIN AI agent via AgentPool for authentic response
-        response = npc.properties.get('default_response',
-            f"{npc.properties.get('name', npc.id)} acknowledges you.")
-        return True, response, {'npc_id': npc.id, 'npc_response': response}
+        # Prefer AI-generated dialogue set by the engine's async reaction phase.
+        # Falls back to the NPC's generated default_response or a neutral greeting.
+        ai_message = npc.properties.get('last_ai_message')
+        response = ai_message or npc.properties.get(
+            'default_response',
+            f"{npc.properties.get('name', npc.id)} acknowledges you."
+        )
+        return True, response, {
+            'npc_id': npc.id,
+            'npc_response': response,
+            'ai_driven': bool(ai_message),
+            'npc_mood': npc.properties.get('mood', 'neutral'),
+            'npc_trust': round(npc.properties.get('trust', 0.5), 2),
+        }
 
     def _handle_negotiate(self, params: Dict) -> Tuple[bool, str, Dict]:
         """Attempt to haggle with a shopkeeper over an item price."""
@@ -325,7 +346,11 @@ class GameSession:
             'item_id': item_id,
             'offered_price': offered_price
         })
-        # TODO: route to NPC_ADMIN AI agent for authentic acceptance logic
+        # Outcome is deterministic with trust modifiers applied immediately.
+        # The engine's Reaction Phase will call npc_reaction on the next tick
+        # and update last_ai_message/mood/trust for this NPC asynchronously.
+        # This keeps the player's HTTP response instant while AI enrichment
+        # follows on the next game state poll.
         multiplier = npc.properties.get('pricing_multiplier', 1.0)
         # trust in [0, 1]: higher trust lowers the NPC's minimum acceptable price
         trust = npc.properties.get('trust', 0.5)
@@ -415,8 +440,9 @@ class GameSession:
         item = inventory.get(item_id)
         if not item:
             return False, f"Item '{item_id}' not in store inventory.", {}
-        # Success chance based on guard presence; NPC_ADMIN will refine this
-        # TODO: route to NPC_ADMIN AI agent for authentic outcome resolution
+        # Outcome is deterministic with trust and guard-count modifiers.
+        # The engine's Reaction Phase will call npc_reaction on the next tick,
+        # updating the store NPC's mood and last_ai_message asynchronously.
         # Guards hired by this agent have been bribed/distracted — they don't count
         alert_guards = [
             e for e in self.state.entities.values()
@@ -464,10 +490,16 @@ class GameSession:
         receive_item = npc_inv.get(receive_item_id)
         if not receive_item:
             return False, f"NPC doesn't have item '{receive_item_id}'.", {}
-        # TODO: route to NPC_ADMIN AI agent for acceptance decision
+        # Outcome is deterministic with a trust modifier: friendly NPCs accept
+        # slightly worse deals.  The engine's Reaction Phase will call
+        # npc_reaction after this event, enriching the NPC's dialogue async.
         give_val = give_items[0].get('value', 0)
         recv_val = receive_item.get('value', 0)
-        accepted = give_val >= recv_val * 0.8
+        trust = npc.properties.get('trust', 0.5)
+        # At trust=1.0 the NPC accepts offers down to 70% of item value;
+        # at trust=0.0 they require at least 90%.
+        threshold = max(0.5, 0.9 - 0.2 * trust)
+        accepted = give_val >= recv_val * threshold
         self.state.log_event('trade_proposal', {
             'agent_id': self.agent_id, 'npc_id': npc.id,
             'give_item_id': give_item_id, 'receive_item_id': receive_item_id, 'accepted': accepted
