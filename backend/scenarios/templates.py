@@ -72,7 +72,7 @@ class ScenarioTemplate:
 # MARKET SQUARE TEMPLATE
 # AI models will generate a unique market instance from this template each time
 SCENARIO_MARKET_SQUARE_TEMPLATE = ScenarioTemplate(
-    scenario_id="market_square",
+    scenario_id="scenario_001",
     name="Dynamic Market Acquisition",
     description="""
     An AI-generated market scenario with unique stores, NPCs, and items each time.
@@ -168,7 +168,7 @@ class ScenarioManager:
     """Manages available scenario templates (not instances)"""
     
     TEMPLATES = {
-        'market_square': SCENARIO_MARKET_SQUARE_TEMPLATE,
+        'scenario_001': SCENARIO_MARKET_SQUARE_TEMPLATE,
         # Future templates:
         # 'heist_planning': SCENARIO_HEIST_TEMPLATE,
         # 'negotiation_chain': SCENARIO_NEGOTIATION_TEMPLATE,

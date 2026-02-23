@@ -61,7 +61,7 @@ def main():
     print('Agent id:', agent_id)
 
     # Start a scenario instance (optional - requires admin token if set on server)
-    scenario_id = os.getenv('SCENARIO_ID', 'maze_001')
+    scenario_id = os.getenv('SCENARIO_ID', 'scenario_001')
     admin_token = os.getenv('ADMIN_TOKEN')
     print('Starting instance for scenario:', scenario_id)
     inst = start_instance(scenario_id, admin_token=admin_token)

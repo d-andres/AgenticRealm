@@ -90,12 +90,12 @@ async def test_integration():
 
     templates = ScenarioManager.get_all_templates()
     assert len(templates) > 0, "No scenario templates registered"
-    t = ScenarioManager.get_template('market_square')
+    t = ScenarioManager.get_template('scenario_001')
     assert t is not None
-    assert ScenarioManager.template_exists('market_square')
+    assert ScenarioManager.template_exists('scenario_001')
     assert not ScenarioManager.template_exists('nonexistent_scenario')
     print(f"✓ Templates available: {[t.scenario_id for t in templates]}")
-    print(f"  market_square: {t.name}")
+    print(f"  scenario_001: {t.name}")
     print(f"  max_turns={t.max_turns}, starting_gold={t.starting_gold}\n")
 
     # ------------------------------------------------------------------
@@ -105,7 +105,7 @@ async def test_integration():
     print("-" * 40)
 
     mgr = GameSessionManager()
-    sess = mgr.create_session('market_square', 'agent_test_01')
+    sess = mgr.create_session('scenario_001', 'agent_test_01')
     mgr.start_session(sess.game_id)
 
     assert sess.status == 'in_progress'
