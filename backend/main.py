@@ -7,9 +7,12 @@ All scenario logic lives in scenarios/.
 """
 
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 from core.engine import GameEngine, set_engine
 from ai_agents.agent_pool import get_agent_pool, shutdown_agent_pool
@@ -52,6 +55,25 @@ app.include_router(scenarios_router, prefix="/api/v1/scenarios")
 app.include_router(feed_router,      prefix="/api/v1")
 app.include_router(analytics_router, prefix="/api/v1")
 app.include_router(ai_agents_router, prefix="/api/v1/ai-agents")
+
+# ---- Static frontend (served when built dist is present) -----------
+
+_FRONTEND_DIST = Path(__file__).parent.parent / "frontend" / "dist"
+
+if _FRONTEND_DIST.is_dir():
+    # Serve JS/CSS/assets under their natural paths
+    app.mount("/assets", StaticFiles(directory=_FRONTEND_DIST / "assets"), name="assets")
+
+    @app.get("/", include_in_schema=False)
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_spa(full_path: str = ""):
+        """SPA fallback — return index.html for any non-API path."""
+        # Don't intercept API or health routes
+        if full_path.startswith(("api/", "health", "docs", "openapi", "redoc")):
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404)
+        return FileResponse(_FRONTEND_DIST / "index.html")
+
 
 # ---- Health & info --------------------------------------------------
 
