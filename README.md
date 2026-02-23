@@ -1,3 +1,13 @@
+---
+title: AgenticRealm
+emoji: 🏰
+colorFrom: purple
+colorTo: blue
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # AgenticRealm
 
 **AgenticRealm** is an educational platform and **Agentic AI System** where users design external AI agents that navigate complex scenarios controlled by intelligent system agent NPCs.
