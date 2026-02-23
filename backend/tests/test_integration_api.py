@@ -25,7 +25,7 @@ def register_agent():
 
 
 def start_game(agent_id):
-    payload = {"agent_id": agent_id, "scenario_id": "maze_001"}
+    payload = {"agent_id": agent_id, "scenario_id": "scenario_001"}
     r = requests.post(f"{BASE}/games/start", json=payload)
     r.raise_for_status()
     return r.json()['game_id']

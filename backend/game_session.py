@@ -390,6 +390,10 @@ class GameSession:
         store = self._resolve_npc(params)
         if not store:
             return False, "Store not found. Provide 'store_id'.", {}
+        if self._is_incapacitated(store):
+            return False, (
+                f"{store.properties.get('name', store.id)} is incapacitated and cannot sell anything."
+            ), {'npc_id': store.id, 'npc_status': 'incapacitated'}
         item_id = params.get('item_id')
         if not item_id:
             return False, "Provide 'item_id'.", {}
