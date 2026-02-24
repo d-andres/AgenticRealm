@@ -209,7 +209,7 @@ async function joinInstance() {
     logLobby(`✓ Joined! game_id=${gameId.slice(0, 8)}…`, 'ok');
 
     setView('game');
-    gameLog(`Entered world. Turn 0. Gold: ${500}. Health: 100`, 'sys');
+    gameLog('Entered world. Fetching initial state…', 'sys');
     startGamePolling();
     await pollState();   // immediate first state load
   } catch (e) {
@@ -260,10 +260,11 @@ function refreshGameUI(data) {
     list.innerHTML = entities.map(e => {
       const name = e.properties?.name || e.id.replace(/_/g, ' ');
       const job  = e.properties?.job  ? ` · ${e.properties.job}` : '';
+      // Show the entity ID so the player knows what to type in the Target ID field
       return `<div class="entity-row">
         <span class="etype">${e.type}</span>
         <span class="ename">${name}${job}</span>
-        <span class="edist">${e.id}</span>
+        <span class="edist" title="Entity ID — use this in the Target ID field">#${e.id}</span>
       </div>`;
     }).join('');
   }
@@ -314,7 +315,29 @@ function renderMap(data) {
 }
 
 async function quickAction(action, params = {}) {
-  await submitAction(action, params);
+  const res = await submitAction(action, params);
+  // After observe, replace the entity list with distance-annotated nearby results
+  if (action === 'observe' && res?.state_update?.entities?.length) {
+    displayObserveResults(res.state_update.entities);
+  }
+}
+
+/** Populate entity list from an observe action result (includes distance). */
+function displayObserveResults(nearbyEntities) {
+  const list = document.getElementById('entity-list');
+  if (!nearbyEntities.length) {
+    list.innerHTML = '<div style="color:var(--muted)">Nothing within observe range.</div>';
+    return;
+  }
+  list.innerHTML = nearbyEntities.map(e => {
+    const name = e.properties?.name || e.id.replace(/_/g, ' ');
+    const job  = e.properties?.job  ? ` · ${e.properties.job}` : '';
+    return `<div class="entity-row">
+      <span class="etype">${e.type}</span>
+      <span class="ename">${name}${job}</span>
+      <span class="edist" title="Distance from your agent">${e.distance}m</span>
+    </div>`;
+  }).join('');
 }
 
 async function submitCustomAction() {
@@ -328,16 +351,18 @@ async function submitCustomAction() {
 
   const params = { ...extra };
   if (target) {
-    // auto-assign target to the right param key based on action
-    if (['buy', 'steal', 'negotiate'].includes(action)) params.store_id = target;
-    else params.npc_id = target;
+    // assign target to the correct param key expected by each backend handler
+    if (['buy', 'steal'].includes(action))   params.store_id  = target;
+    else if (action === 'negotiate')          params.store_id  = target;  // _handle_negotiate resolves store_id via _resolve_npc
+    else if (action === 'interact')           params.entity_id = target;  // _handle_interact reads entity_id
+    else                                      params.npc_id    = target;  // talk / hire / trade
   }
   await submitAction(action, params);
   hideCustomAction();
 }
 
 async function submitAction(action, params) {
-  if (!gameId) return;
+  if (!gameId) return null;
   try {
     const res = await apiFetch(`/games/${gameId}/action`, {
       method: 'POST',
@@ -346,8 +371,10 @@ async function submitAction(action, params) {
     const icon = res.success ? '✓' : '✗';
     gameLog(`${icon} [${action}] ${res.message}`, res.success ? 'ok' : 'err');
     await pollState();
+    return res;   // callers can inspect state_update (e.g. observe results)
   } catch (e) {
     gameLog(`✗ ${e.message}`, 'err');
+    return null;
   }
 }
 
