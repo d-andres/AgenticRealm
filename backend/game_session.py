@@ -104,10 +104,6 @@ class GameSession:
         if self.status != "in_progress":
             return False, "Game is not in progress", {}
         
-        if self.turn >= self.scenario.max_turns:
-            self.status = "completed"
-            return False, "Maximum turns reached", {}
-
         # Validate against the scenario template's allowed action set.
         # Checked before the turn increment so invalid actions don't cost a turn.
         if self.scenario and self.scenario.allowed_actions:

@@ -3,228 +3,351 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>AgenticRealm</title>
+  <title>AgenticRealm — Simulation Host</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --green:   #00ff00;
-      --green-d: #00cc00;
-      --bg:      #000000;
-      --panel:   #0d0d1a;
-      --border:  #1a1a33;
-      --muted:   #556655;
-      --red:     #ff4444;
-      --yellow:  #ffcc00;
+      --green:    #00ff00;
+      --green-d:  #00cc00;
+      --green-dim: rgba(0,255,0,0.08);
+      --bg:       #000000;
+      --panel:    #0a0a16;
+      --panel2:   #060610;
+      --border:   #181830;
+      --muted:    #445544;
+      --red:      #ff4444;
+      --yellow:   #ffcc00;
+      --blue:     #4499ff;
     }
 
+    /* ====== SETUP VIEW ====================================== */
     body {
-      background: var(--bg);
-      color: #ccc;
-      font-family: 'Courier New', monospace;
-      font-size: 13px;
-      min-height: 100vh;
+      background: var(--bg); color: #bbb;
+      font-family: 'Courier New', monospace; font-size: 13px;
     }
-
-    /* ── Layout ──────────────────────────────────────────── */
-    #header {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      padding: 14px 24px;
-      border-bottom: 1px solid var(--border);
-    }
-    #header h1 { color: var(--green); font-size: 20px; letter-spacing: 2px; }
-    #header .tag {
-      font-size: 10px;
-      padding: 2px 8px;
-      border: 1px solid var(--muted);
-      color: var(--muted);
-      border-radius: 2px;
-    }
-    #conn-dot { margin-left: auto; font-size: 11px; }
-    #conn-dot.ok  { color: var(--green); }
-    #conn-dot.err { color: var(--red); }
-
-    main { max-width: 960px; margin: 0 auto; padding: 24px 16px; }
-
-    /* ── Progress bar ─────────────────────────────────────── */
-    #progress { display: flex; margin-bottom: 28px; }
-    .step {
-      flex: 1;
-      padding: 8px 0;
-      text-align: center;
-      font-size: 11px;
-      letter-spacing: 1px;
-      border: 1px solid var(--border);
-      color: var(--muted);
-    }
-    .step.active { border-color: var(--green); color: var(--green); }
-    .step.done   { border-color: var(--muted); color: var(--muted); background: #0a0a0a; }
-
-    /* ── Views ────────────────────────────────────────────── */
-    .view { display: none; }
+    .view       { display: none; }
     .view.active { display: block; }
 
-    /* ── Cards ────────────────────────────────────────────── */
+    /* shared top bar */
+    .top-bar {
+      display: flex; align-items: center; gap: 14px;
+      padding: 10px 20px; border-bottom: 1px solid var(--border);
+      background: var(--panel); flex-shrink: 0;
+    }
+    .top-bar h1 { color: var(--green); font-size: 17px; letter-spacing: 3px; }
+    .tag {
+      font-size: 10px; padding: 2px 7px;
+      border: 1px solid var(--muted); color: var(--muted);
+      border-radius: 2px; letter-spacing: 1px;
+    }
+    #conn-dot { margin-left: auto; font-size: 11px; color: var(--red); }
+    #conn-dot.ok { color: var(--green); }
+
+    #setup-main { max-width: 860px; margin: 0 auto; padding: 22px 16px; }
+
     .card {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      padding: 20px;
-      margin-bottom: 16px;
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 4px; padding: 18px; margin-bottom: 14px;
     }
     .card h2 {
-      font-size: 12px;
-      letter-spacing: 2px;
-      color: var(--green);
-      margin-bottom: 16px;
-      text-transform: uppercase;
+      font-size: 11px; letter-spacing: 2px; color: var(--green);
+      text-transform: uppercase; margin-bottom: 14px;
     }
-    .card h2 span { color: var(--muted); font-weight: normal; }
+    .card h2 span { color: var(--muted); font-weight: normal; text-transform: none; }
 
-    /* ── Form elements ────────────────────────────────────── */
-    .row { display: flex; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
-    .field { display: flex; flex-direction: column; flex: 1; min-width: 140px; }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+    .field { display: flex; flex-direction: column; flex: 1; min-width: 130px; }
     .field label { font-size: 10px; color: var(--muted); margin-bottom: 4px; letter-spacing: 1px; text-transform: uppercase; }
     .field input, .field select {
-      background: #050510;
-      border: 1px solid var(--border);
-      color: #ccc;
-      padding: 7px 9px;
-      border-radius: 3px;
-      font-family: inherit;
-      font-size: 13px;
-      outline: none;
+      background: #050510; border: 1px solid var(--border);
+      color: #ccc; padding: 7px 9px; border-radius: 3px;
+      font-family: inherit; font-size: 13px; outline: none;
     }
     .field input:focus, .field select:focus { border-color: var(--green); }
     .field select option { background: #050510; }
-    .field input[readonly] { color: var(--muted); }
 
-    /* ── Buttons ──────────────────────────────────────────── */
     .btn {
-      padding: 9px 20px;
-      border: 1px solid var(--green);
-      background: transparent;
-      color: var(--green);
-      font-family: inherit;
-      font-size: 12px;
-      letter-spacing: 1px;
-      cursor: pointer;
-      border-radius: 3px;
-      transition: background 0.15s;
+      padding: 8px 18px; border: 1px solid var(--green);
+      background: transparent; color: var(--green);
+      font-family: inherit; font-size: 12px; letter-spacing: 1px;
+      cursor: pointer; border-radius: 3px; transition: background 0.12s;
     }
-    .btn:hover:not(:disabled) { background: rgba(0,255,0,0.08); }
+    .btn:hover:not(:disabled) { background: var(--green-dim); }
     .btn:disabled { border-color: var(--muted); color: var(--muted); cursor: default; }
     .btn.primary { background: var(--green); color: #000; font-weight: bold; }
     .btn.primary:hover:not(:disabled) { background: var(--green-d); }
-    .btn.danger { border-color: var(--red); color: var(--red); }
-    .btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+    .btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
 
-    /* ── Status badges ────────────────────────────────────── */
-    .badge {
-      display: inline-block;
-      font-size: 10px;
-      padding: 2px 8px;
-      border-radius: 2px;
-      letter-spacing: 1px;
-      text-transform: uppercase;
+    #setup-log {
+      background: #020208; border: 1px solid var(--border); border-radius: 3px;
+      padding: 10px; height: 130px; overflow-y: auto;
+      font-size: 11px; line-height: 1.7;
     }
-    .badge.generating { background: #332200; color: var(--yellow); border: 1px solid var(--yellow); }
-    .badge.active     { background: #002200; color: var(--green);  border: 1px solid var(--green); }
-    .badge.pending    { background: #111;    color: var(--muted);  border: 1px solid var(--muted); }
-
-    /* ── Setup log ────────────────────────────────────────── */
-    #log, #log-lobby {
-      background: #020208;
-      border: 1px solid var(--border);
-      border-radius: 3px;
-      padding: 10px;
-      height: 140px;
-      overflow-y: auto;
-      font-size: 11px;
-      line-height: 1.7;
-    }
-    .entry       { color: #aaa; }
+    .entry       { color: #888; }
     .entry.ok    { color: var(--green); }
     .entry.err   { color: var(--red); }
     .entry.info  { color: var(--yellow); }
 
-    /* ── Game view ────────────────────────────────────────── */
-    #game-layout {
-      display: grid;
-      grid-template-columns: 1fr 320px;
-      gap: 16px;
+    .agent-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 5px 0; border-bottom: 1px solid var(--border); font-size: 12px;
     }
-    @media (max-width: 700px) { #game-layout { grid-template-columns: 1fr; } }
+    .agent-row:last-child { border-bottom: none; }
+    .a-dot { font-size: 10px; }
+    .a-dot.ok  { color: var(--green); }
+    .a-dot.err { color: var(--red); }
+    .muted { color: var(--muted); font-size: 11px; }
 
-    #world-map {
-      background: #020208;
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      height: 380px;
-      position: relative;
-      overflow: hidden;
+    /* ====== SIMULATION VIEW =================================== */
+    #view-simulation {
+      position: fixed; inset: 0;
+      flex-direction: column;
     }
-    #world-canvas { width: 100%; height: 100%; display: block; }
+    #view-simulation.active { display: flex; }
 
-    .stat-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
-    .stat {
-      flex: 1;
-      min-width: 70px;
-      background: #020208;
-      border: 1px solid var(--border);
-      border-radius: 3px;
-      padding: 8px;
-      text-align: center;
+    #sim-header {
+      display: flex; align-items: center; gap: 12px;
+      padding: 7px 16px; border-bottom: 1px solid var(--border);
+      background: var(--panel); flex-shrink: 0; font-size: 12px;
     }
-    .stat .label { font-size: 9px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; }
-    .stat .value { font-size: 18px; color: var(--green); font-weight: bold; margin-top: 2px; }
-
-    #entity-list { max-height: 180px; overflow-y: auto; }
-    .entity-row {
-      display: flex;
-      justify-content: space-between;
-      padding: 5px 0;
-      border-bottom: 1px solid var(--border);
-      font-size: 11px;
+    #sim-header .title { color: var(--green); font-size: 15px; letter-spacing: 3px; font-weight: bold; }
+    .badge {
+      display: inline-block; font-size: 10px; padding: 2px 7px;
+      border-radius: 2px; letter-spacing: 1px; text-transform: uppercase;
     }
-    .entity-row .etype { color: var(--muted); min-width: 50px; }
-    .entity-row .ename { color: #ccc; flex: 1; padding: 0 6px; }
-    .entity-row .edist { color: var(--yellow); }
+    .badge.generating { background: #332200; color: var(--yellow); border: 1px solid var(--yellow); }
+    .badge.active     { background: #002200; color: var(--green);  border: 1px solid var(--green); }
+    .badge.stopped    { background: #220000; color: var(--red);    border: 1px solid var(--red); }
+    #sim-conn-dot { margin-left: auto; font-size: 11px; color: var(--red); }
+    #sim-conn-dot.ok { color: var(--green); }
 
-    .action-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 8px;
-      margin-bottom: 12px;
+    #sim-body { flex: 1; display: flex; min-height: 0; }
+
+    /* Map */
+    #sim-left { flex: 1; position: relative; background: #020208; min-width: 0; }
+    #world-canvas { display: block; width: 100%; height: 100%; }
+
+    #map-legend {
+      position: absolute; top: 10px; left: 10px;
+      background: rgba(0,0,0,0.78); border: 1px solid var(--border);
+      border-radius: 3px; padding: 8px 10px;
+      font-size: 10px; line-height: 2; pointer-events: none;
     }
-    .action-grid .btn { padding: 7px 4px; font-size: 11px; text-align: center; }
+    .legend-row { display: flex; align-items: center; gap: 6px; }
+    .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .legend-sq  { width: 10px; height: 10px; flex-shrink: 0; }
 
-    #game-log {
-      background: #020208;
-      border: 1px solid var(--border);
-      border-radius: 3px;
-      padding: 8px;
-      height: 120px;
+    /* Sidebar */
+    #sim-right {
+      width: 295px; flex-shrink: 0; display: flex; flex-direction: column;
+      border-left: 1px solid var(--border); background: var(--panel);
       overflow-y: auto;
-      font-size: 11px;
-      line-height: 1.65;
     }
-    #game-log .ok  { color: var(--green); }
-    #game-log .err { color: var(--red); }
-    #game-log .sys { color: var(--yellow); }
+    .sim-card { border-bottom: 1px solid var(--border); padding: 12px 14px; }
+    .sim-card h3 {
+      font-size: 10px; letter-spacing: 2px; text-transform: uppercase;
+      color: var(--green); margin-bottom: 10px;
+    }
+    .sim-card h3 .count { color: var(--yellow); font-weight: normal; margin-left: 4px; }
+
+    /* Join key */
+    #join-code {
+      font-size: 30px; font-weight: bold; letter-spacing: 6px;
+      color: var(--green); text-align: center;
+      border: 2px solid var(--green); border-radius: 4px;
+      padding: 7px 0; margin-bottom: 10px;
+      background: rgba(0,255,0,0.03);
+    }
+    .join-step { font-size: 10px; color: var(--muted); margin-bottom: 3px; letter-spacing: 0.5px; }
+    .join-url {
+      font-size: 10px; color: #666; word-break: break-all;
+      background: var(--panel2); border: 1px solid var(--border);
+      border-radius: 3px; padding: 5px 7px; margin-bottom: 7px;
+    }
+
+    /* Players */
+    .player-row {
+      display: flex; align-items: center; gap: 6px;
+      padding: 5px 0; border-bottom: 1px solid var(--border); font-size: 11px;
+    }
+    .player-row:last-child { border-bottom: none; }
+    .p-dot { font-size: 9px; }
+    .p-dot.active-dot { color: var(--green); }
+    .p-dot.ok         { color: #44ff88; }
+    .p-dot.err        { color: var(--red); }
+    .p-name { flex: 1; color: #ccc; }
+    .p-stat { color: var(--muted); font-size: 10px; min-width: 38px; text-align: right; }
+
+    /* Activity log — fills remaining sidebar height */
+    #activity-log-wrap {
+      flex: 1; min-height: 180px; overflow-y: auto;
+      display: flex; flex-direction: column;
+    }
+    .log-header {
+      position: sticky; top: 0; background: var(--panel);
+      padding: 9px 14px 6px;
+      border-bottom: 1px solid var(--border);
+      font-size: 10px; letter-spacing: 2px;
+      text-transform: uppercase; color: var(--green);
+      flex-shrink: 0;
+    }
+    #activity-log { padding: 4px 14px 10px; }
+    .log-entry {
+      padding: 3px 0; border-bottom: 1px solid var(--border);
+      font-size: 10px; line-height: 1.6; color: #666; word-break: break-word;
+    }
+    .log-entry:last-child { border-bottom: none; }
+    .log-entry.ok   { color: #448855; }
+    .log-entry.warn { color: #886622; }
+    .log-entry.sys  { color: var(--muted); font-style: italic; }
   </style>
 </head>
 <body>
 
-<div id="header">
-  <h1>⬡ AGENTIC REALM</h1>
-  <span class="tag">SIMULATION PLATFORM</span>
-  <span id="conn-dot" class="err">● API unreachable</span>
+<!-- ═══════════════════════════════════════════════════════════════
+     VIEW 1 — SETUP
+════════════════════════════════════════════════════════════════ -->
+<div class="view active" id="view-setup">
+
+  <div class="top-bar">
+    <h1>⬡ AGENTIC REALM</h1>
+    <span class="tag">SIMULATION HOST</span>
+    <span id="conn-dot">● connecting…</span>
+  </div>
+
+  <div id="setup-main">
+
+    <div class="card">
+      <h2>System AI Agents <span>— enables AI-driven NPC behaviour &amp; world generation</span></h2>
+      <div class="row">
+        <div class="field">
+          <label>Provider</label>
+          <select id="ai-type">
+            <option value="openai">OpenAI</option>
+            <option value="anthropic">Anthropic</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Role</label>
+          <select id="ai-role">
+            <option value="npc_admin">NPC Admin</option>
+            <option value="scenario_generator">Scenario Generator</option>
+          </select>
+        </div>
+        <div class="field" style="flex:2;">
+          <label>API Key</label>
+          <input type="password" id="ai-key" placeholder="sk-…">
+        </div>
+        <div class="field">
+          <label>Model</label>
+          <input type="text" id="ai-model" placeholder="gpt-4o">
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn" onclick="App.registerAIAgent()">Register Agent</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Registered Agents</h2>
+      <div id="agent-list"><div class="muted">Loading…</div></div>
+    </div>
+
+    <div class="card">
+      <h2>World</h2>
+      <p style="color:var(--muted); margin-bottom:14px; line-height:1.8; font-size:12px;">
+        Spawns a persistent world from <strong style="color:#ccc">scenario_001</strong>.
+        NPCs, stores and items are generated procedurally (rule-based by default;
+        AI-driven if a <em>scenario_generator</em> is registered above).
+        The world runs indefinitely — players join via their own AI agents using
+        the key shown on the simulation screen. Think of this screen as the
+        Jackbox host TV: it shows the world, and players connect from their own devices.
+      </p>
+      <div class="btn-row">
+        <button class="btn primary" onclick="App.generateWorld()">Generate World &amp; Launch Simulation</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Log</h2>
+      <div id="setup-log"></div>
+    </div>
+
+  </div>
 </div>
 
-<main>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     VIEW 2 — SIMULATION HOST SCREEN  (full viewport, permanent)
+════════════════════════════════════════════════════════════════ -->
+<div class="view" id="view-simulation">
+
+  <!-- Slim header bar -->
+  <div id="sim-header">
+    <span class="title">⬡ AGENTIC REALM</span>
+    <span class="tag">scenario_001</span>
+    <span id="sim-status-badge" class="badge generating">generating</span>
+    <span style="color:var(--muted); font-size:11px;" id="sim-entity-count"></span>
+    <span style="margin-left:auto; color:var(--muted); font-size:11px;" id="sim-tick">world tick —</span>
+    <span id="sim-conn-dot">● offline</span>
+  </div>
+
+  <div id="sim-body">
+
+    <!-- World map canvas (fills all remaining space) -->
+    <div id="sim-left">
+      <canvas id="world-canvas"></canvas>
+
+      <div id="map-legend">
+        <div class="legend-row"><div class="legend-dot" style="background:#00ff00; box-shadow:0 0 4px #00ff00;"></div> Agent</div>
+        <div class="legend-row"><div class="legend-dot" style="background:#ffcc00;"></div> NPC</div>
+        <div class="legend-row"><div class="legend-sq"  style="background:#4499ff;"></div> Store</div>
+        <div class="legend-row"><div class="legend-dot" style="background:#ff88ff;"></div> Item</div>
+        <div class="legend-row"><div class="legend-dot" style="background:#ff4444;"></div> Hazard</div>
+        <div class="legend-row"><div class="legend-dot" style="background:#eeeeee;"></div> Exit</div>
+      </div>
+    </div>
+
+    <!-- Right sidebar -->
+    <div id="sim-right">
+
+      <!-- Join key — the "Jackbox code" -->
+      <div class="sim-card">
+        <h3>Join Key</h3>
+        <div id="join-code">--------</div>
+        <div class="join-step">① Register your AI agent:</div>
+        <div class="join-url" id="join-register-url">POST /api/v1/agents/register</div>
+        <div class="join-step">② Join this world:</div>
+        <div class="join-url" id="join-instance-url">POST /api/v1/scenarios/instances/…/join?agent_id=…</div>
+        <div class="btn-row">
+          <button class="btn" style="font-size:10px;padding:5px 12px;" onclick="App.copyJoinKey()">Copy Full ID</button>
+        </div>
+      </div>
+
+      <!-- Players -->
+      <div class="sim-card">
+        <h3>Players <span class="count" id="player-count">0</span></h3>
+        <div id="player-list"><div class="muted">No players yet</div></div>
+      </div>
+
+      <!-- Activity log fills remaining sidebar height -->
+      <div id="activity-log-wrap">
+        <div class="log-header">Activity Log</div>
+        <div id="activity-log">
+          <div class="log-entry sys">Waiting for world events…</div>
+        </div>
+      </div>
+
+    </div><!-- #sim-right -->
+  </div><!-- #sim-body -->
+
+</div><!-- #view-simulation -->
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
+
 
   <!-- Progress steps -->
   <div id="progress">

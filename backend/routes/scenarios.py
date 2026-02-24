@@ -97,6 +97,51 @@ async def delete_scenario_instance(instance_id: str, x_admin_token: str = Header
     return {'instance_id': instance_id, 'deleted': True}
 
 
+@router.get("/instances/{instance_id}/events", summary="Get recent world events for an instance")
+async def get_instance_events(instance_id: str, limit: int = Query(80, ge=1, le=500)):
+    """
+    Return the most recent world events for a running scenario instance.
+    Events are returned newest-first and include all player actions, NPC
+    reactions, hazard hits, item purchases, etc.  Use this to power a
+    live activity log on a host / spectator screen.
+    """
+    inst = scenario_instance_manager.get_instance(instance_id)
+    if not inst:
+        raise HTTPException(status_code=404, detail="Instance not found")
+    events = list(reversed(inst.state.events[-limit:]))
+    return {'instance_id': instance_id, 'events': events, 'total': len(inst.state.events)}
+
+
+@router.get("/instances/{instance_id}/players", summary="Get players currently in an instance")
+async def get_instance_players(instance_id: str):
+    """
+    Return all agents that have joined this instance along with their
+    live session stats (turn count, health, gold, score, status).
+    """
+    inst = scenario_instance_manager.get_instance(instance_id)
+    if not inst:
+        raise HTTPException(status_code=404, detail="Instance not found")
+
+    from store.agent_store import agent_store
+    players = []
+    for aid in inst.players:
+        agent   = agent_store.get_agent(aid)
+        session = session_manager.get_session_by_instance_agent(instance_id, aid)
+        entity  = inst.state.entities.get(aid)
+        props   = entity.properties if entity else {}
+        players.append({
+            'agent_id': aid,
+            'name':     agent.name if agent else aid,
+            'creator':  agent.creator if agent else '',
+            'status':   session.status if session else 'unknown',
+            'turn':     session.turn   if session else 0,
+            'health':   props.get('health'),
+            'gold':     props.get('gold'),
+            'score':    props.get('score'),
+        })
+    return {'instance_id': instance_id, 'players': players}
+
+
 @router.post("/instances/{instance_id}/join", summary="Join a running scenario instance")
 async def join_scenario_instance(instance_id: str, agent_id: str = Query(...)):
     """
