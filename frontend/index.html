@@ -219,7 +219,7 @@
   <div id="setup-main">
 
     <div class="card">
-      <h2>System AI Agents <span>— enables AI-driven NPC behaviour &amp; world generation</span></h2>
+      <h2>System AI Agents <span>— required for AI-driven NPC behaviour &amp; world generation</span></h2>
       <div class="row">
         <div class="field">
           <label>Provider</label>
@@ -261,8 +261,7 @@
         NPCs, stores and items are generated procedurally (rule-based by default;
         AI-driven if a <em>scenario_generator</em> is registered above).
         The world runs indefinitely — players join via their own AI agents using
-        the key shown on the simulation screen. Think of this screen as the
-        Jackbox host TV: it shows the world, and players connect from their own devices.
+        the key shown on the simulation screen.
       </p>
       <div class="btn-row">
         <button class="btn primary" onclick="App.generateWorld()">Generate World &amp; Launch Simulation</button>
@@ -312,7 +311,7 @@
     <!-- Right sidebar -->
     <div id="sim-right">
 
-      <!-- Join key — the "Jackbox code" -->
+      <!-- Join key -->
       <div class="sim-card">
         <h3>Join Key</h3>
         <div id="join-code">--------</div>
@@ -348,211 +347,3 @@
 </body>
 </html>
 
-
-  <!-- Progress steps -->
-  <div id="progress">
-    <div class="step active" id="step-1">1 · SETUP</div>
-    <div class="step"        id="step-2">2 · WORLD ACTIVE</div>
-    <div class="step"        id="step-3">3 · PLAYING</div>
-  </div>
-
-  <!-- ── VIEW 1: Setup ──────────────────────────────────── -->
-  <div class="view active" id="view-setup">
-
-    <div class="card">
-      <h2>System AI Agents <span>— optional, enables AI-driven NPC behaviour</span></h2>
-      <div class="row">
-        <div class="field">
-          <label>Provider</label>
-          <select id="ai-type">
-            <option value="openai">OpenAI</option>
-            <option value="anthropic">Anthropic</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Role</label>
-          <select id="ai-role">
-            <option value="npc_admin">NPC Admin</option>
-            <option value="scenario_generator">Scenario Generator</option>
-          </select>
-        </div>
-        <div class="field" style="flex:2;">
-          <label>API Key</label>
-          <input type="password" id="ai-key" placeholder="sk-...">
-        </div>
-        <div class="field">
-          <label>Model</label>
-          <input type="text" id="ai-model" placeholder="gpt-4o">
-        </div>
-      </div>
-      <div class="btn-row">
-        <button class="btn" onclick="App.registerAIAgent()">Register AI Agent</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>World Generation</h2>
-      <p style="color:var(--muted); margin-bottom:14px; line-height:1.7;">
-        Spawns a persistent world from the <strong style="color:#ccc">scenario_001</strong> template.
-        NPCs, stores, and items are generated procedurally (rule-based by default; AI-driven if an agent is registered above).
-        Once the world is <span class="badge active">active</span> other agents can join.
-      </p>
-      <div class="btn-row">
-        <button class="btn primary" onclick="App.generateWorld()">Generate World</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>Log</h2>
-      <div id="log"></div>
-    </div>
-
-  </div>
-
-  <!-- ── VIEW 2: Lobby ──────────────────────────────────── -->
-  <div class="view" id="view-lobby">
-
-    <div class="card">
-      <h2>World Status</h2>
-      <div class="row" style="align-items:center;">
-        <div class="field" style="flex:0;min-width:120px;">
-          <label>Status</label>
-          <div style="padding-top:4px;"><span id="instance-status-badge" class="badge generating">generating</span></div>
-        </div>
-        <div class="field">
-          <label>Instance ID</label>
-          <input type="text" id="instance-id-display" readonly>
-        </div>
-        <div class="field">
-          <label>Scenario</label>
-          <input type="text" id="scenario-name-display" readonly value="scenario_001">
-        </div>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>Join as Player Agent</h2>
-      <div class="row">
-        <div class="field">
-          <label>Agent Name</label>
-          <input type="text" id="player-name" value="PlayerAgent">
-        </div>
-        <div class="field">
-          <label>Creator (email)</label>
-          <input type="text" id="player-creator" value="player@example.com">
-        </div>
-        <div class="field">
-          <label>Model</label>
-          <input type="text" id="player-model" value="gpt-4o">
-        </div>
-      </div>
-      <div class="row">
-        <div class="field" style="flex:3;">
-          <label>Description</label>
-          <input type="text" id="player-desc" value="A strategic market agent">
-        </div>
-      </div>
-      <div class="btn-row">
-        <button class="btn primary" id="join-btn" onclick="App.joinInstance()" disabled>
-          Waiting for world…
-        </button>
-        <button class="btn" onclick="App.backToSetup()">← Back</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>Log</h2>
-      <div id="log-lobby"></div>
-    </div>
-
-  </div>
-
-  <!-- ── VIEW 3: Game ───────────────────────────────────── -->
-  <div class="view" id="view-game">
-
-    <div id="game-layout">
-
-      <!-- Left: stats + map + log -->
-      <div>
-        <div class="stat-row">
-          <div class="stat"><div class="label">Turn</div><div class="value" id="g-turn">0</div></div>
-          <div class="stat"><div class="label">Health</div><div class="value" id="g-health">100</div></div>
-          <div class="stat"><div class="label">Gold</div><div class="value" id="g-gold">500</div></div>
-          <div class="stat"><div class="label">Score</div><div class="value" id="g-score">0</div></div>
-        </div>
-
-        <div id="world-map">
-          <canvas id="world-canvas"></canvas>
-        </div>
-
-        <div class="card" style="margin-top:12px;">
-          <h2>Game Log</h2>
-          <div id="game-log"></div>
-        </div>
-      </div>
-
-      <!-- Right: actions + entities -->
-      <div>
-
-        <div class="card">
-          <h2>Movement &amp; Actions</h2>
-          <div class="action-grid">
-            <button class="btn" onclick="App.quickAction('move',{direction:'up'})">↑ Up</button>
-            <button class="btn" onclick="App.quickAction('observe',{radius:150})">👁 Observe</button>
-            <button class="btn" onclick="App.quickAction('move',{direction:'down'})">↓ Down</button>
-            <button class="btn" onclick="App.quickAction('move',{direction:'left'})">← Left</button>
-            <button class="btn" onclick="App.quickAction('move',{direction:'right'})">→ Right</button>
-            <button class="btn" onclick="App.showCustomAction()">⋯ Custom</button>
-          </div>
-
-          <div id="action-params" style="display:none;">
-            <div class="field" style="margin-bottom:8px;">
-              <label>Action</label>
-              <select id="custom-action" onchange="App.updateActionHint()">
-                <option value="talk">talk</option>
-                <option value="negotiate">negotiate</option>
-                <option value="buy">buy</option>
-                <option value="hire">hire</option>
-                <option value="steal">steal</option>
-                <option value="trade">trade</option>
-              </select>
-            </div>
-            <div class="field" style="margin-bottom:8px;">
-              <label>Target ID (npc_id / store_id)</label>
-              <input type="text" id="custom-target" placeholder="npc_1">
-            </div>
-            <div class="field" style="margin-bottom:8px;">
-              <label>Extra params (JSON)</label>
-              <input type="text" id="custom-params" placeholder='{"item_id":"ruby_gem"}'>
-              <div id="action-hint" style="font-size:10px;color:var(--muted);margin-top:3px;"></div>
-            </div>
-            <div class="btn-row">
-              <button class="btn primary" onclick="App.submitCustomAction()">Submit</button>
-              <button class="btn" onclick="App.hideCustomAction()">Cancel</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="card">
-          <h2>Nearby Entities</h2>
-          <div id="entity-list"><div style="color:var(--muted)">Observe to reveal entities…</div></div>
-        </div>
-
-        <div class="card">
-          <h2>Controls</h2>
-          <div class="btn-row">
-            <button class="btn" onclick="App.pollState()">↺ Refresh</button>
-            <button class="btn danger" onclick="App.endGame()">End Game</button>
-          </div>
-        </div>
-
-      </div>
-    </div>
-
-  </div>
-
-</main>
-
-<script type="module" src="./src/main.js"></script>
-</body>
-</html>

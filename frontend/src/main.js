@@ -3,7 +3,7 @@
  *
  * Flow:
  *   View 1 (Setup)      → register system AI agents → generate world
- *   View 2 (Simulation) → Jackbox-style host screen:
+ *   View 2 (Simulation) → host screen:
  *                          world map canvas | join key + player list + activity log
  *
  * There are no player controls here.  Players join from their own devices via
@@ -93,7 +93,11 @@ async function refreshAgentList() {
     const d = await apiFetch('/ai-agents/list');
     const el = document.getElementById('agent-list');
     if (!d.agents || d.agents.length === 0) {
-      el.innerHTML = '<div class="muted">None registered — world will use rule-based generation.</div>';
+      el.innerHTML = '<div class="muted">No agents registered.</div>';
+      logSetup(
+        'WARNING: No system AI agents connected. World will be generated using hardcoded random entities (test mode). Register an agent above for AI-driven generation.',
+        'err'
+      );
       return;
     }
     el.innerHTML = d.agents.map(a => `
@@ -109,6 +113,17 @@ async function refreshAgentList() {
 }
 
 async function generateWorld() {
+  // Warn clearly if no AI agents are registered
+  try {
+    const d = await apiFetch('/ai-agents/list');
+    if (!d.agents || d.agents.length === 0) {
+      logSetup(
+        'No system AI agents connected — generating world with hardcoded random entities (test/fallback mode).',
+        'err'
+      );
+    }
+  } catch { /* non-fatal — proceed */ }
+
   logSetup('Generating world from scenario_001…', 'info');
   try {
     const d = await apiFetch('/scenarios/scenario_001/instances', { method: 'POST' });
