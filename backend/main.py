@@ -111,7 +111,7 @@ async def get_info():
 
 # ---- Engine lifecycle -----------------------------------------------
 
-engine = GameEngine(tick_rate=float(os.getenv('TICK_RATE', '1.0')))
+engine = GameEngine(tick_rate=float(os.getenv('TICK_RATE', '2.0')))
 set_engine(engine)  # register as global singleton for scenarios/instances.py
 
 
