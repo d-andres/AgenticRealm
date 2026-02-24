@@ -26,6 +26,7 @@ let agentId     = null;
 let gameId      = null;
 let pollTimer   = null;
 let gameState   = null;
+let gameOver    = false;   // prevents duplicate game-over log lines
 
 // ---------------------------------------------------------------------------
 // Utilities
@@ -40,9 +41,6 @@ function log(selector, text, type = '') {
   el.appendChild(line);
   el.scrollTop = el.scrollHeight;
 }
-const setupLog = t => log('#log',       t, arguments[1]);
-const lobbyLog = t => log('#log-lobby', t, arguments[1]);
-
 function logSetup(text, type = '')  { log('#log',       text, type); }
 function logLobby(text, type = '')  { log('#log-lobby', text, type); }
 function gameLog(text, type = '')   {
@@ -209,6 +207,7 @@ async function joinInstance() {
     logLobby(`✓ Joined! game_id=${gameId.slice(0, 8)}…`, 'ok');
 
     setView('game');
+    gameOver = false;
     gameLog('Entered world. Fetching initial state…', 'sys');
     startGamePolling();
     await pollState();   // immediate first state load
@@ -240,9 +239,19 @@ async function pollState() {
 }
 
 function refreshGameUI(data) {
+  // Detect terminal states before updating the UI
+  if ((data.status === 'completed' || data.status === 'failed') && !gameOver) {
+    gameOver = true;
+    if (gamePolling) { clearInterval(gamePolling); gamePolling = null; }
+    const icon = data.status === 'completed' ? '✓' : '✗';
+    gameLog(`── ${icon} GAME ${data.status.toUpperCase()} ── Click "End Game" for your final score.`, 'sys');
+  }
+
+  const maxTurns = data.world_properties?.max_turns;
   const agent = data.entities?.[agentId];
   if (agent) {
-    document.getElementById('g-turn').textContent   = data.turn ?? 0;
+    const turnText = maxTurns ? `${data.turn ?? 0} / ${maxTurns}` : (data.turn ?? 0);
+    document.getElementById('g-turn').textContent   = turnText;
     document.getElementById('g-health').textContent = agent.properties?.health ?? '—';
     document.getElementById('g-gold').textContent   = agent.properties?.gold   ?? '—';
     document.getElementById('g-score').textContent  = Math.round(agent.properties?.score ?? 0);
@@ -380,6 +389,24 @@ async function submitAction(action, params) {
 
 function showCustomAction() {
   document.getElementById('action-params').style.display = 'block';
+  updateActionHint();   // set hint for the current selection
+}
+
+function updateActionHint() {
+  const action = document.getElementById('custom-action').value;
+  const hintEl = document.getElementById('action-hint');
+  const paramInput = document.getElementById('custom-params');
+  const HINTS = {
+    talk:      { placeholder: '',                              hint: 'Optionally add: {"message": "Hello!"}' },
+    negotiate: { placeholder: '{"item_id":"ruby_gem","offered_price":80}', hint: 'Required: item_id + offered_price' },
+    buy:       { placeholder: '{"item_id":"ruby_gem"}',        hint: 'Required: item_id' },
+    hire:      { placeholder: '',                              hint: 'No extra params needed' },
+    steal:     { placeholder: '{"item_id":"ruby_gem"}',        hint: 'Required: item_id' },
+    trade:     { placeholder: '{"give_item_id":"sword","receive_item_id":"key"}', hint: 'Required: give_item_id + receive_item_id' },
+  };
+  const h = HINTS[action] || { placeholder: '', hint: '' };
+  paramInput.placeholder = h.placeholder || '';
+  hintEl.textContent = h.hint;
 }
 
 function hideCustomAction() {
@@ -412,6 +439,7 @@ window.App = {
   quickAction,
   showCustomAction,
   hideCustomAction,
+  updateActionHint,
   submitCustomAction,
   endGame,
 };

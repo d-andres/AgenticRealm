@@ -385,7 +385,7 @@
           <div id="action-params" style="display:none;">
             <div class="field" style="margin-bottom:8px;">
               <label>Action</label>
-              <select id="custom-action">
+              <select id="custom-action" onchange="App.updateActionHint()">
                 <option value="talk">talk</option>
                 <option value="negotiate">negotiate</option>
                 <option value="buy">buy</option>
@@ -401,6 +401,7 @@
             <div class="field" style="margin-bottom:8px;">
               <label>Extra params (JSON)</label>
               <input type="text" id="custom-params" placeholder='{"item_id":"ruby_gem"}'>
+              <div id="action-hint" style="font-size:10px;color:var(--muted);margin-top:3px;"></div>
             </div>
             <div class="btn-row">
               <button class="btn primary" onclick="App.submitCustomAction()">Submit</button>

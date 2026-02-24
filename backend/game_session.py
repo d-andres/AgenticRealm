@@ -592,6 +592,7 @@ class GameSession:
                 'name': self.scenario.name if self.scenario else self.scenario_id,
                 'world_width': world_w,
                 'world_height': world_h,
+                'max_turns': max_turns,
                 'allowed_actions': self.state.properties.get('allowed_actions', []),
             }
         }
