@@ -13,10 +13,12 @@
 const API = '/api/v1';
 
 // ── State ──────────────────────────────────────────────────────────
-let instanceId  = null;
+let instanceId   = null;
 let genPollTimer = null;
 let simTimer     = null;
 let _shownEvents = 0;   // tracks how many events we have already displayed
+let _scenarios   = [];  // cached scenario list from API
+let _selectedScenario = null;  // currently selected ScenarioResponse object
 
 // ── Utilities ──────────────────────────────────────────────────────
 
@@ -62,6 +64,43 @@ async function checkAPI() {
 }
 
 // ── VIEW 1 — Setup ─────────────────────────────────────────────────
+
+async function loadScenarios() {
+  const sel   = document.getElementById('scenario-select');
+  const btn   = document.getElementById('gen-world-btn');
+  try {
+    const data = await apiFetch('/scenarios');
+    _scenarios = Array.isArray(data) ? data : [];
+    if (!_scenarios.length) {
+      sel.innerHTML = '<option value="">No scenarios available</option>';
+      return;
+    }
+    sel.innerHTML = _scenarios.map(s =>
+      `<option value="${s.scenario_id}">${s.name}</option>`
+    ).join('');
+    sel.value = _scenarios[0].scenario_id;
+    onScenarioChange();
+    if (btn) btn.disabled = false;
+  } catch (e) {
+    sel.innerHTML = '<option value="">Failed to load scenarios</option>';
+    logSetup(`Could not load scenarios: ${e.message}`, 'err');
+  }
+}
+
+function onScenarioChange() {
+  const sel  = document.getElementById('scenario-select');
+  const desc = document.getElementById('scenario-desc');
+  const diff = document.getElementById('scenario-difficulty');
+  _selectedScenario = _scenarios.find(s => s.scenario_id === sel.value) || null;
+  if (_selectedScenario) {
+    desc.textContent = _selectedScenario.short_description || _selectedScenario.description.trim().split('\n')[0];
+    const diffMap = { easy: '🟢 Easy', medium: '🟡 Medium', hard: '🔴 Hard' };
+    diff.textContent = diffMap[_selectedScenario.difficulty] || _selectedScenario.difficulty;
+  } else {
+    desc.textContent = '';
+    diff.textContent = '—';
+  }
+}
 
 async function registerAIAgent() {
   const type  = document.getElementById('ai-type').value;
@@ -113,6 +152,12 @@ async function refreshAgentList() {
 }
 
 async function generateWorld() {
+  if (!_selectedScenario) {
+    logSetup('Select a scenario first.', 'err');
+    return;
+  }
+  const scenarioId = _selectedScenario.scenario_id;
+
   // Warn clearly if no AI agents are registered
   try {
     const d = await apiFetch('/ai-agents/list');
@@ -124,9 +169,9 @@ async function generateWorld() {
     }
   } catch { /* non-fatal — proceed */ }
 
-  logSetup('Generating world from scenario_001…', 'info');
+  logSetup(`Generating world from “${_selectedScenario.name}”…`, 'info');
   try {
-    const d = await apiFetch('/scenarios/scenario_001/instances', { method: 'POST' });
+    const d = await apiFetch(`/scenarios/${scenarioId}/instances`, { method: 'POST' });
     instanceId = d.instance_id;
     logSetup(`✓ Instance ${instanceId.slice(0, 8)}… created. Waiting for world to become active…`, 'ok');
     startGenPoll();
@@ -156,6 +201,9 @@ function startGenPoll() {
 // ── VIEW 2 — Simulation ────────────────────────────────────────────
 
 function enterSimulation() {
+  // Update sim header tag with the selected scenario name
+  const tag = document.getElementById('sim-scenario-tag');
+  if (tag && _selectedScenario) tag.textContent = _selectedScenario.name;
   updateJoinInfo();
   setView('simulation');
   startSimPolling();
@@ -436,10 +484,12 @@ window.App = {
   registerAIAgent,
   generateWorld,
   copyJoinKey,
+  onScenarioChange,
 };
 
-// ── Boot ───────────────────────────────────────────────────────────
+// ── Boot ─────────────────────────────────────────────────────
 
 checkAPI();
 refreshAgentList();
+loadScenarios();
 

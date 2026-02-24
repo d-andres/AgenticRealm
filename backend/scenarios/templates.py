@@ -59,6 +59,9 @@ class ScenarioTemplate:
     # Item rarity distribution
     item_rarity_distribution: Dict[str, float]  # {"common": 0.6, "uncommon": 0.25, "rare": 0.1, ...}
     
+    # Short one-line description shown in scenario selector dropdowns
+    short_description: str = ""
+
     # Action types allowed in this scenario
     allowed_actions: List[ActionType] = field(default_factory=list)
     
@@ -72,8 +75,9 @@ class ScenarioTemplate:
 # MARKET SQUARE TEMPLATE
 # AI models will generate a unique market instance from this template each time
 SCENARIO_MARKET_SQUARE_TEMPLATE = ScenarioTemplate(
-    scenario_id="scenario_001",
-    name="Dynamic Market Acquisition",
+    scenario_id="market_square",
+    name="Market Square",
+    short_description="Navigate a bustling market to acquire a valuable item through trade, negotiation, or cunning.",
     description="""
     An AI-generated market scenario with unique stores, NPCs, and items each time.
     Your goal: acquire a valuable item through various means.
@@ -168,7 +172,7 @@ class ScenarioManager:
     """Manages available scenario templates (not instances)"""
     
     TEMPLATES = {
-        'scenario_001': SCENARIO_MARKET_SQUARE_TEMPLATE,
+        'market_square': SCENARIO_MARKET_SQUARE_TEMPLATE,
         # Future templates:
         # 'heist_planning': SCENARIO_HEIST_TEMPLATE,
         # 'negotiation_chain': SCENARIO_NEGOTIATION_TEMPLATE,

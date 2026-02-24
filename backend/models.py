@@ -99,6 +99,7 @@ class ScenarioResponse(BaseModel):
     """Scenario information"""
     scenario_id: str
     name: str
+    short_description: str = ""
     description: str
     rules: str
     objectives: List[str]

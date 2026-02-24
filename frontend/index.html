@@ -256,15 +256,24 @@
 
     <div class="card">
       <h2>World</h2>
-      <p style="color:var(--muted); margin-bottom:14px; line-height:1.8; font-size:12px;">
-        Spawns a persistent world from <strong style="color:#ccc">scenario_001</strong>.
-        NPCs, stores and items are generated procedurally (rule-based by default;
-        AI-driven if a <em>scenario_generator</em> is registered above).
-        The world runs indefinitely — players join via their own AI agents using
-        the key shown on the simulation screen.
-      </p>
+
+      <div class="row" style="align-items:flex-end;">
+        <div class="field" style="flex:1;">
+          <label>Scenario</label>
+          <select id="scenario-select" onchange="App.onScenarioChange()">
+            <option value="">Loading scenarios…</option>
+          </select>
+        </div>
+        <div class="field" style="min-width:80px; flex:0;">
+          <label>Difficulty</label>
+          <div id="scenario-difficulty" style="padding:7px 0; color:var(--muted); font-size:12px;">—</div>
+        </div>
+      </div>
+
+      <p id="scenario-desc" style="color:var(--muted); margin:10px 0 14px; line-height:1.8; font-size:12px; min-height:2.4em;"></p>
+
       <div class="btn-row">
-        <button class="btn primary" onclick="App.generateWorld()">Generate World &amp; Launch Simulation</button>
+        <button class="btn primary" id="gen-world-btn" onclick="App.generateWorld()" disabled>Generate World &amp; Launch Simulation</button>
       </div>
     </div>
 
@@ -285,7 +294,7 @@
   <!-- Slim header bar -->
   <div id="sim-header">
     <span class="title">⬡ AGENTIC REALM</span>
-    <span class="tag">scenario_001</span>
+    <span class="tag" id="sim-scenario-tag">—</span>
     <span id="sim-status-badge" class="badge generating">generating</span>
     <span style="color:var(--muted); font-size:11px;" id="sim-entity-count"></span>
     <span style="margin-left:auto; color:var(--muted); font-size:11px;" id="sim-tick">world tick —</span>

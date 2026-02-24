@@ -32,6 +32,7 @@ async def list_scenarios():
         ScenarioResponse(
             scenario_id=s.scenario_id,
             name=s.name,
+            short_description=getattr(s, 'short_description', ''),
             description=s.description,
             rules=s.rules,
             objectives=s.objectives,
@@ -244,6 +245,7 @@ async def get_scenario(scenario_id: str):
     return ScenarioResponse(
         scenario_id=scenario.scenario_id,
         name=scenario.name,
+        short_description=getattr(scenario, 'short_description', ''),
         description=scenario.description,
         rules=scenario.rules,
         objectives=scenario.objectives,
