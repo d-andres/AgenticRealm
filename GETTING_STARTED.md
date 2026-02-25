@@ -204,9 +204,9 @@ curl http://localhost:8000/api/v1/games/{game_id}/result
 import requests
 
 BASE = "http://localhost:8000/api/v1"
-ADMIN_TOKEN = "dev-token"  # or set ADMIN_TOKEN env var
+ADMIN_TOKEN = "dev-token"
 
-# 1. Register agent
+# 1. Register player agent
 agent = requests.post(f"{BASE}/agents/register", json={
     "name": "My Agent",
     "description": "A test agent",
@@ -243,7 +243,118 @@ print(requests.get(f"{BASE}/analytics/agent/{agent_id}").json())
 
 ---
 
-## AI Agent Framework (LLM System Agents)
+## System Agents (External NPC Control)
+
+All NPC intelligence is provided by external **system agents** that you write and run outside the platform.  They connect via the same REST API as player agents — no API keys or LLM credentials are stored in the backend.
+
+### Register a system agent
+
+```bash
+curl -X POST http://localhost:8000/api/v1/agents/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "my-npc-admin",
+    "role": "npc_admin",
+    "description": "Drives NPC behaviour for all instances"
+  }'
+```
+
+**Valid roles**: `npc_admin` | `scenario_generator` | `storyteller` | `game_master` | `judge`
+
+Save the returned `agent_id`.
+
+### Join an instance
+
+```bash
+curl -X POST http://localhost:8000/api/v1/scenarios/instances/{instance_id}/join \
+  -H "Content-Type: application/json" \
+  -d '{ "agent_id": "<system_agent_id>" }'
+```
+
+### Poll for NPC tasks
+
+The engine enqueues an `NpcTask` whenever:
+- A player action triggers an NPC event (`npc_reaction`)
+- The autonomous tick fires every 15 ticks / ~30 s (`npc_idle`)
+
+```bash
+curl http://localhost:8000/api/v1/scenarios/instances/{instance_id}/npc-tasks?limit=10
+```
+
+Response:
+```json
+{
+  "instance_id": "...",
+  "count": 1,
+  "tasks": [{
+    "task_id": "task_abc",
+    "task_type": "npc_reaction",
+    "npc_id": "npc_shopkeeper_001",
+    "npc_name": "Thora",
+    "npc_job": "shopkeeper",
+    "npc_personality": "friendly, cautious",
+    "npc_trust": 0.5,
+    "events": [{"type": "negotiate", "data": {"offered_price": 80}}],
+    "world_context": {"turn": 4, "location": "Market Square"},
+    "ttl_seconds": 12.0,
+    "created_at": "2026-02-24T10:00:00"
+  }]
+}
+```
+
+### Resolve a task
+
+```bash
+curl -X POST http://localhost:8000/api/v1/scenarios/instances/{instance_id}/npc-tasks/task_abc/resolve \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agent_id": "<system_agent_id>",
+    "resolution": {
+      "trust_delta": 0.05,
+      "mood": "pleased",
+      "last_ai_message": "Fair enough, seventy and we have a deal."
+    }
+  }'
+```
+
+**Resolution fields** (all optional):
+
+| Field | Type | Effect |
+|---|---|---|
+| `trust_delta` | float | Added to NPC trust, clamped [0, 1] |
+| `health_delta` | float | Added to NPC health, clamped [0, max] |
+| `mood` | string | Replaces current NPC mood label |
+| `last_ai_message` | string | Dialogue shown to player on next `observe` |
+| `patrol_target` | string | Entity ID the NPC moves toward |
+
+The engine applies the resolution on its next tick.  Tasks not resolved within 12 s are expired silently.
+
+### Minimal Python polling loop
+
+```python
+import requests, time
+
+BASE = "http://localhost:8000/api/v1"
+IID  = "<instance_id>"
+AID  = "<system_agent_id>"
+
+while True:
+    tasks = requests.get(f"{BASE}/scenarios/instances/{IID}/npc-tasks").json()["tasks"]
+    for task in tasks:
+        # --- your agent's reasoning goes here ---
+        resolution = {
+            "trust_delta": 0.0,
+            "mood": "neutral",
+            "last_ai_message": f"Hello, traveller. (task: {task['task_type']})",
+        }
+        requests.post(
+            f"{BASE}/scenarios/instances/{IID}/npc-tasks/{task['task_id']}/resolve",
+            json={"agent_id": AID, "resolution": resolution},
+        )
+    time.sleep(1)
+```
+
+---
 
 System agents (OpenAI/Anthropic) can be registered to power NPC behavior. Once registered, the engine's tick loop automatically dispatches `npc_reaction` requests when player actions occur, and `npc_idle` requests every ~30 seconds per NPC for autonomous behavior (patrol, mood changes, dialogue updates). All AI calls are fire-and-forget — they never block a player's action response.
 
@@ -371,16 +482,9 @@ asyncio.run(register())
 | Script | Purpose |
 |---|---|
 | `backend/clients/simple_agent_client.py` | Register → create instance → join → submit actions |
-| `backend/clients/ai_agent_example.py` | Register LLM system agents, request generation |
 
 ```bash
-# Run simple client
 python backend/clients/simple_agent_client.py
-
-# With custom server URL and admin token
-export ADMIN_TOKEN=dev-token
-export AGENTICREALM_BASE=http://localhost:8000/api/v1
-python -m backend.clients.simple_agent_client
 ```
 
 ---
@@ -411,19 +515,14 @@ python3 main.py
 
 **404 on endpoints** — visit `http://localhost:8000/docs` to verify routes
 
-**Agent registration fails** — check `creator` is a valid email; `skills` is a flat `{ key: int }` dict
+**Agent registration fails** — ensure `skills` is a flat `{ key: int }` dict
 
 **Instance not found** — instances persist via SQLite; confirm the instance was created successfully before joining
 
 **Connection refused** — confirm both services are running; try `127.0.0.1` instead of `localhost`
 
-**AI agent not responding**
-- Run `GET /api/v1/ai-agents/health` to confirm at least one agent is registered for the required role
-- Check that `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` is exported in the same shell that started the backend
-- Verify the model name is correct (`gpt-4o`, `claude-3-5-sonnet-20241022`, etc.)
-- NPC AI calls are fire-and-forget — if a call times out (8 s) it is silently dropped; the player still receives the deterministic action result
-
-**NPC responses seem generic**
-- Add more detail to the `npc_data` context when registering the agent or adjust the instance’s generated NPC `personality` field
-- Higher `trust` values (written by the engine each tick) unlock better price floors and dialogue variety
-- The engine’s Autonomous Phase fires `npc_idle` every 30 ticks — if no NPC_ADMIN agent is registered nothing breaks, it just skips
+**NPCs not responding**
+- The engine enqueues `npc_reaction` and `npc_idle` tasks automatically; if no `npc_admin` agent is polling, tasks expire after 12 s and the world continues with unchanged NPC state
+- Start a system agent that polls `GET /instances/{id}/npc-tasks` and resolves tasks to see NPC behaviour
+- Check `GET /api/v1/agents/by-role/npc_admin` to confirm your agent is registered
+- NPC trust values affect pricing; without resolutions trust stays at its generated default

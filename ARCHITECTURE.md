@@ -2,90 +2,163 @@
 
 ## Core Concept
 
-**AgenticRealm** is an **Agentic AI System** and API-first learning platform where:
+**AgenticRealm** is a game runtime that enables multi-agent interaction inside procedurally generated worlds.
 
-- **User Agents** (externally built in GPT Builder, Claude, custom scripts) submit HTTP actions to interact with live scenarios
-- **System AI Agents** (built-in, pluggable AI providers) control scenario NPCs — their behavior is driven by a swappable decision-maker
-- **Multi-Agent Interaction** produces emergent gameplay that the platform uses to evaluate agent decision-making
+All AI — both player agents and system agents — is **external**.  The backend does not call any LLM or embed any reasoning.  It is purely a game world simulator that:
+
+1. Generates a world from a scenario template
+2. Accepts player actions via REST
+3. Enqueues NPC decision tasks for external system agents to resolve
+4. Applies resolved decisions to world state on the next engine tick
 
 ---
 
-## Scenario Model: Templates → AI-Generated Instances
+```mermaid
+flowchart TD
+    subgraph external["External — your code"]
+        PA["🎮 Player Agents<br/>any LLM / script / service<br/><br/>POST /agents/register  role=player<br/>POST /instances/{id}/join<br/>POST /instances/{id}/action"]
+        SA["🤖 System Agents<br/>any LLM / script / service<br/><br/>POST /agents/register  role=npc_admin<br/>POST /instances/{id}/join<br/>GET  /instances/{id}/npc-tasks<br/>POST /instances/{id}/npc-tasks/{id}/resolve"]
+    end
 
-Scenarios are **templates** (rules, constraints, generation guidance). Every instance created from a template is procedurally unique — AI generates the stores, NPCs, items, and story.
+    subgraph backend["AgenticRealm Backend"]
+        API["FastAPI API<br/>routes: agents · scenarios · games · analytics · feed"]
+        ENGINE["core/engine.py — async tick loop<br/>Apply Phase: drain resolved tasks → apply to world<br/>Reaction Phase: drain EventBus → enqueue npc_reaction<br/>Autonomous Phase: every 15 ticks → enqueue npc_idle"]
+        EB["core/event_bus.py<br/>GameEvent pub/sub<br/>per-instance deque"]
+        TQ["store/task_queue.py<br/>NpcTaskQueue<br/>TTL = 12 s"]
+        INST["scenarios/instances.py<br/>Always-on persistent worlds<br/>SQLite persistence"]
+    end
 
+    PA -->|"HTTP actions"| API
+    SA -->|"HTTP register / join / resolve"| API
+    API --> ENGINE
+    ENGINE -->|"publishes events"| EB
+    ENGINE -->|"enqueues NPC tasks"| TQ
+    EB --> INST
+    TQ -.->|"agent polls & resolves"| SA
 ```
-ScenarioTemplate  (templates.py)
-        ↓  rules + constraints
-ScenarioGenerator  (generator.py)  ←  pluggable decision-maker
-        ↓  AI-generated content
-ScenarioInstance  (instances.py)   ←  unique stores, NPCs, items, story
-        ↓
-Agents join and play unique world
+
+---
+
+## How System Agents Work
+
+System agents are external processes — they can be any language, LLM, or service.  They connect via the same REST API as player agents:
+
+### 1. Register with a role
+
+```bash
+POST /api/v1/agents/register
+{
+  "name": "my-npc-admin",
+  "role": "npc_admin",
+  "description": "Drives NPC reactions for all instances"
+}
 ```
 
-### Generation Workflow
+**Valid system roles**: `npc_admin` | `scenario_generator` | `storyteller` | `game_master` | `judge`
 
-1. Admin creates instance from template (e.g., `market_square`)
-2. `ScenarioGenerator` calls `decision_maker("generate_stores", context)` → unique store names, proprietors, locations
-3. `ScenarioGenerator` calls `decision_maker("generate_npcs", context)` → NPCs with names, jobs, personalities, skills
-4. `ScenarioGenerator` calls `decision_maker("generate_items_and_inventory", context)` → items distributed across stores
-5. Target item and difficulty rating calculated
-6. `ScenarioInstance` persisted to SQLite; agents can join
+### 2. Join an instance
+
+```bash
+POST /api/v1/scenarios/instances/{instance_id}/join
+{ "agent_id": "agent_xyz" }
+```
+
+### 3. Poll for NPC tasks
+
+```bash
+GET /api/v1/scenarios/instances/{instance_id}/npc-tasks?limit=10
+```
+
+Returns pending `NpcTask` objects.  Each task has:
+- `task_type`: `"npc_reaction"` (player triggered it) or `"npc_idle"` (autonomous tick)
+- `npc_id`, `npc_name`, `npc_job`, `npc_personality`, `npc_trust` — current NPC state
+- `events` — player events that triggered this reaction (`npc_reaction` tasks only)
+- `world_context` — locations, items, and nearby entities visible to the NPC
+- `created_at`, `ttl_seconds` — task expires if not resolved within the TTL
+
+### 4. Resolve the task
+
+```bash
+POST /api/v1/scenarios/instances/{instance_id}/npc-tasks/{task_id}/resolve
+{
+  "agent_id": "agent_xyz",
+  "resolution": {
+    "trust_delta": 0.05,
+    "mood": "pleased",
+    "last_ai_message": "Fair enough, I'll take it.",
+    "patrol_target": "store_02"
+  }
+}
+```
+
+The engine's next tick applies the resolution to the NPC's live world state.
+
+Tasks not resolved within `TASK_TTL_SECONDS` (12 s default) are silently expired.
+
+---
+
+## Engine Tick Phases
+
+The engine runs at `TICK_RATE` seconds (default 2.0 s, configurable via env var).
+
+```mermaid
+flowchart TD
+    TICK(["Tick N"])
+    APPLY["Apply Phase<br/>drain_resolved from NpcTaskQueue<br/>for each resolved task → _apply_npc_update"]
+    REACTION["Reaction Phase<br/>drain EventBus for instance<br/>group events by NPC<br/>for each affected NPC → enqueue npc_reaction"]
+    CHECK{"turn % 15 == 0?"}
+    IDLE["Autonomous Phase<br/>for each unhandled NPC<br/>→ enqueue npc_idle"]
+    DONE(["wait for next tick"])
+
+    TICK --> APPLY
+    APPLY --> REACTION
+    REACTION --> CHECK
+    CHECK -->|yes| IDLE
+    CHECK -->|no| DONE
+    IDLE --> DONE
+```
+
+`_apply_npc_update` writes to the NPC entity:
+- `trust` — clamped [0.0, 1.0]; drives pricing and outcome calculations
+- `health` — clamped [0.0, max_health]
+- `mood` — free-form label
+- `last_ai_message` — dialogue returned to players on next `observe`
+- `patrol_target` — entity ID the NPC moves toward (future position system)
+
+---
+
+## Scenario Model: Templates → Instances
+
+```mermaid
+flowchart TD
+    T["ScenarioTemplate<br/>scenarios/templates.py<br/>rules · constraints · allowed actions · difficulty"]
+    G["ScenarioGenerator<br/>scenarios/generator.py<br/>rule-based by default<br/>accepts any callable decision-maker"]
+    I["ScenarioInstance<br/>scenarios/instances.py<br/>unique stores · NPCs · items · starting gold<br/>persisted to SQLite"]
+    W["Live World<br/>agents join and submit actions<br/>engine tick drives NPC task queue<br/>external system agents resolve NPC decisions"]
+
+    T -->|"admin creates instance"| G
+    G -->|"procedural generation"| I
+    I -->|"status becomes active"| W
+```
 
 ### Pluggable Decision-Maker
 
-The generator accepts any callable: `(generation_type: str, context: dict) -> dict`
-
-```python
-# Rule-based   — deterministic, no LLM (baseline / testing)
-# OpenAI       — creative, consistent
-# Anthropic    — flexible
-# Custom       — any callable that matches the signature
-
-generator = ScenarioGenerator(decision_maker=your_choice)
-```
+`ScenarioGenerator` accepts any callable with the signature `(generation_type: str, context: dict) -> dict`.  The default is rule-based (deterministic, no LLM).
 
 ---
 
-## System Architecture
+## Agent Roles Reference
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│            External User Agents (GPT, Claude, scripts)      │
-└────────────────────────┬────────────────────────────────────┘
-                         │  HTTP REST API
-┌────────────────────────▼────────────────────────────────────┐
-│                   AgenticRealm API  (FastAPI)                │
-│                                                             │
-│  routes/agents.py      — agent registration                 │
-│  routes/games.py       — single-agent game sessions         │
-│  routes/scenarios.py   — scenario templates & instances     │
-│  routes/ai_agents.py   — LLM system agent pool              │
-│  routes/analytics.py   — leaderboards, agent stats          │
-│  routes/feed.py        — event feed                         │
-└──────────┬─────────────────────────┬───────────────────────┘
-           │                         │
-  ┌────────▼────────────────────────────────────────────┐
-  │  core/engine.py  —  instance registry + tick loop   │
-  │  Reaction Phase: drain EventBus → npc_reaction AI   │
-  │  Autonomous Phase (every 30 ticks): npc_idle AI      │
-  │  AI calls capped at 8 s via asyncio.wait_for         │
-  └──────────┬──────────────────────────┬───────────────┘
-             │                          │
-  ┌──────────▼──────────┐   ┌──────────▼─────────────┐
-  │  core/event_bus.py  │   │  ai_agents/             │
-  │  Per-instance deque │   │  OpenAI / Anthropic     │
-  │  GameEvent pub/sub  │   │  npc_reaction + npc_idle │
-  └──────────┬──────────┘   └────────────────────────┘
-             │
-  ┌──────────▼──────────────────────────────────────────┐
-  │  Scenario Instances  (scenarios/instances.py)        │
-  │  Always-on persistent worlds + agent states          │
-  │  Registered with engine on creation; state publishes │
-  │  GameEvents; persisted to SQLite across restarts     │
-  └─────────────────────────────────────────────────────┘
-```
+| Role | Value | `is_system_agent` | Responsibility |
+|---|---|---|---|
+| Player | `player` | false | Participates in the scenario world |
+| NPC Admin | `npc_admin` | true | Polls `npc-tasks`; drives NPC reactions and idle behaviour |
+| Scenario Generator | `scenario_generator` | true | Can supply richer world generation |
+| Storyteller | `storyteller` | true | Writes narrative context (optional) |
+| Game Master | `game_master` | true | High-level world orchestration |
+| Judge | `judge` | true | Validates complex player action legality |
+
+`SYSTEM_ROLES` is defined in `store/agent_store.py`.
 
 ---
 
@@ -93,22 +166,20 @@ generator = ScenarioGenerator(decision_maker=your_choice)
 
 | Module | Responsibility |
 |---|---|
-| `main.py` | FastAPI app creation, CORS, router registration, engine lifecycle |
-| `models.py` | Pydantic request/response schemas (shared by all routes) |
-| `game_session.py` | `GameSession` + `GameSessionManager` — single-agent sessions |
+| `main.py` | FastAPI app, CORS, router registration, engine lifecycle |
+| `models.py` | Pydantic request/response schemas |
+| `game_session.py` | `GameSession` + `GameSessionManager` — single-agent sessions with action handlers |
 | `scenarios/templates.py` | `ScenarioTemplate` dataclass, `ActionType` enum, `ScenarioManager` registry |
-| `scenarios/generator.py` | `ScenarioGenerator` — AI-driven instance generation (stub parsers, pluggable) |
+| `scenarios/generator.py` | Procedural world generation — rule-based by default; accepts any callable decision-maker |
 | `scenarios/instances.py` | `ScenarioInstance`, `ScenarioInstanceManager`, SQLite persistence |
-| `store/agent_store.py` | In-memory user agent registry (`AgentStore`) |
-| `store/feed.py` | Bounded in-memory event log (`FeedStore`) |
+| `store/agent_store.py` | In-memory agent registry; `role` field + `is_system_agent` property; `get_by_role()` lookup |
+| `store/task_queue.py` | `NpcTaskQueue` — per-instance pending/resolved/expired `NpcTask` objects; TTL enforcement |
+| `store/memory_store.py` | Optional shared key-value memory blackboard per instance; useful when multiple system agents need to share context |
+| `store/feed.py` | Bounded in-memory event log |
 | `store/db.py` | SQLite helpers — `init_db`, `save_instance`, `load_instances` |
-| `core/engine.py` | `GameEngine` — async tick loop, `_instances` registry, Reaction + Autonomous NPC AI phases, `get_engine()`/`set_engine()` singleton |
-| `core/event_bus.py` | `GameEvent` dataclass + `EventBus` — fire-and-forget pub/sub; per-instance deque queues drained each tick |
-| `core/state.py` | `GameState`, `Entity` — world state models; `log_event()` publishes `GameEvent` to bus when `_instance_id` is set |
-| `ai_agents/interfaces.py` | `AIAgent` abstract base, `AIAgentRequest/Response`, `AgentRole` enum; role-specific interfaces (`NPCAdminAgentInterface`, etc.) |
-| `ai_agents/agent_pool.py` | Global pool — register/unregister/request across providers; round-robin load balancing when multiple agents share a role; all agents run concurrently via `asyncio` |
-| `ai_agents/openai_agents.py` | OpenAI provider — `OpenAIScenarioGeneratorAgent`, `OpenAINPCAdminAgent` with `generate_stores`, `generate_npcs`, `npc_reaction`, `npc_idle` |
-| `ai_agents/anthropic_agents.py` | Anthropic provider — same actions as OpenAI agents; swap provider without changing engine code |
+| `core/engine.py` | Async tick loop; Apply / Reaction / Autonomous phases; `_apply_npc_update()` |
+| `core/event_bus.py` | `GameEvent` + `EventBus` — fire-and-forget pub/sub; per-instance deque queues |
+| `core/state.py` | `GameState`, `Entity` — world state models; `log_event()` publishes to EventBus |
 
 ---
 
@@ -116,41 +187,46 @@ generator = ScenarioGenerator(decision_maker=your_choice)
 
 ### Agent Management
 ```
-POST   /api/v1/agents/register
+POST   /api/v1/agents/register           # role: player | npc_admin | scenario_generator | storyteller | game_master | judge
 GET    /api/v1/agents
 GET    /api/v1/agents/{agent_id}
+GET    /api/v1/agents/by-role/{role}
 ```
 
 ### Scenarios & Instances
 ```
 GET    /api/v1/scenarios
 GET    /api/v1/scenarios/{scenario_id}
-POST   /api/v1/scenarios/{scenario_id}/instances     # create (admin)
-GET    /api/v1/scenarios/instances                   # list all
+POST   /api/v1/scenarios/{scenario_id}/instances     # create (x-admin-token required)
+GET    /api/v1/scenarios/instances
 GET    /api/v1/scenarios/instances/{instance_id}
 POST   /api/v1/scenarios/instances/{instance_id}/join
 POST   /api/v1/scenarios/instances/{instance_id}/action
+GET    /api/v1/scenarios/instances/{instance_id}/events
+GET    /api/v1/scenarios/instances/{instance_id}/players
 POST   /api/v1/scenarios/instances/{instance_id}/stop    # admin
 DELETE /api/v1/scenarios/instances/{instance_id}         # admin
 ```
 
-### Game Sessions
+### NPC Task Queue  *(system agent polling loop)*
+```
+GET    /api/v1/scenarios/instances/{instance_id}/npc-tasks
+POST   /api/v1/scenarios/instances/{instance_id}/npc-tasks/{task_id}/resolve
+```
+
+### Shared Instance Memory  *(optional)*
+```
+GET    /api/v1/scenarios/instances/{instance_id}/memory
+POST   /api/v1/scenarios/instances/{instance_id}/memory
+```
+
+### Game Sessions  *(single-agent, no persistence)*
 ```
 POST   /api/v1/games/start
 GET    /api/v1/games/{game_id}
 POST   /api/v1/games/{game_id}/action
 GET    /api/v1/games/{game_id}/result
 POST   /api/v1/games/{game_id}/end
-```
-
-### AI Agent Pool
-```
-POST   /api/v1/ai-agents/register
-POST   /api/v1/ai-agents/unregister/{agent_name}
-GET    /api/v1/ai-agents/list
-GET    /api/v1/ai-agents/status/{agent_name}
-POST   /api/v1/ai-agents/request/{agent_role}/{action}
-GET    /api/v1/ai-agents/health
 ```
 
 ### Analytics & Feed
@@ -160,46 +236,7 @@ GET    /api/v1/analytics/agent/{agent_id}
 GET    /api/v1/feed
 ```
 
-Admin endpoints (`/instances/stop`, `/instances` DELETE, instance creation) require `x-admin-token` header. Default dev token: `dev-token`. Override with `ADMIN_TOKEN` env var.
-
----
-
-## AI Agent Roles
-
-All roles are defined in `ai_agents/interfaces.py` as the `AgentRole` enum.  The agent pool routes requests to the correct role automatically.
-
-| Role | Value | Responsibility |
-|---|---|---|
-| `SCENARIO_GENERATOR` | `scenario_generator` | Generates unique stores, NPCs, and items for new instances |
-| `NPC_ADMIN` | `npc_admin` | Drives NPC reactions (`npc_reaction`) and autonomous idle behaviour (`npc_idle`) |
-| `GAME_MASTER` | `game_master` | Adjudicates complex game rule outcomes |
-| `JUDGE` | `judge` | Validates player action legality |
-| `STORYTELLER` | `storyteller` | Generates narrative descriptions and world flavour |
-| `CUSTOM` | `custom` | Any user-defined role |
-
-Multiple agents of the same role can be registered simultaneously — requests are distributed round-robin across them.
-
-### AI Agent Request / Response Format
-
-```json
-// Request body  POST /api/v1/ai-agents/request/{role}/{action}
-{ "context": { ...role-specific fields... } }
-
-// Response
-{
-  "request_id": "uuid",
-  "agent_role": "npc_admin",
-  "success": true,
-  "result": { ...action-specific payload... },
-  "reasoning": "Agent's explanation of its decision",
-  "metadata": {
-    "agent_name": "my-agent",
-    "provider": "openai",
-    "model": "gpt-4o",
-    "tokens_used": 180
-  }
-}
-```
+Admin endpoints require `x-admin-token` header (default: `dev-token`; override with `ADMIN_TOKEN` env var).
 
 ---
 
@@ -207,41 +244,14 @@ Multiple agents of the same role can be registered simultaneously — requests a
 
 **`market_square`** — the platform's first scenario template.
 
-**Objective**: Obtain a target item through limited resources across a procedurally generated world.
-
-When an instance is created from this template, the generator produces unique entities — their roles, personalities, goals, and relationships are all AI-generated attributes stored on the `ScenarioInstance`. The `SystemAgent` base class operates on these attributes at runtime; no NPC roles are hardcoded.
+**Objective**: Obtain a target item through limited resources via trade, negotiation, or cunning.
 
 **Available Actions**: `observe`, `move`, `talk`, `negotiate`, `buy`, `hire`, `steal`, `trade`
 
-> **NPC AI**: NPC reaction and autonomous idle behavior are implemented — the engine's Reaction Phase fires `npc_reaction` when player events are queued; the Autonomous Phase fires `npc_idle` every 30 ticks. Results (trust delta, mood, dialogue) are applied asynchronously without blocking the player's HTTP response. Full action-outcome calculations (pricing, hire success rates) remain on the roadmap — see [TODO.md](TODO.md).
-
----
-
-## Implementation Roadmap
-
-### Phase 1 — System Agent Framework *(PARTIALLY COMPLETE)*
-- ✅ Rule-based decision-maker (baseline, no LLM) — `_rule_based_decision_maker` in `scenarios/generator.py`
-- ✅ Procedural world generation — `generate_world_entities()` produces unique stores, NPCs, items per instance
-- ✅ NPC AI reaction/idle — `npc_reaction` + `npc_idle` implemented in both OpenAI and Anthropic agents
-- ✅ Non-blocking AI pipeline — `core/event_bus.py` + engine Reaction/Autonomous Phases; player HTTP requests never blocked
-- ✅ Trust delta applied per tick — `_apply_npc_update()` writes `trust_delta`, `mood`, `last_ai_message` to NPC entity
-- [ ] `SystemAgent` base class with `perceive → decide → act` loop
-- [ ] Generic NPC role resolution at runtime from generated instance attributes
-
-### Phase 2 — Dynamic World State
-- [ ] Action outcome calculations based on NPC-generated attributes (pricing, hire success, steal risk)
-- [ ] NPC action feedback — explain why offers were accepted/rejected
-- [ ] NPC position updates on each tick (patrol targets from `npc_idle`)
-
-### Phase 3 — Real-Time Communication
-- Server-Sent Events (SSE) or WebSocket for live state push (replace polling)
-- Action transcript logging
-- NPC position visualization in frontend
-
-### Phase 4 — Advanced Features
-- LLM-powered NPC decisions (swap decision-maker to OpenAI/Anthropic)
-- Replay system with decision-by-decision analysis
-- Additional scenario templates (street negotiation, heist, economic trading)
+NPC `trust` (0.0–1.0) is written back by the engine each tick from system agent resolutions.  It affects:
+- Price floors in `negotiate` and `buy`
+- Hire cost discounts
+- Steal success probability
 
 ---
 
@@ -249,11 +259,11 @@ When an instance is created from this template, the generator produces unique en
 
 | Decision | Rationale |
 |---|---|
-| Templates vs. instances | Templates define fair rules; AI generates unique worlds per instance — no two games are identical |
-| Pluggable decision-maker | Decouple generation/NPC logic from provider — swap rule-based → LLM without changing engine |
-| Event Bus (fire-and-forget) | `GameState.log_event()` publishes synchronously; engine drains asynchronously — zero HTTP blocking |
-| AI calls on event queue only | Reaction Phase only runs when events are queued; Autonomous Phase rate-limited to 30-tick interval — controls LLM cost |
-| Agent pool round-robin | Multiple agents of the same role share load automatically; one agent going offline doesn't break requests |
-| `scenarios/__init__.py` does not import `instances.py` | Prevents eager DB init as a side-effect of unrelated imports |
-| Routes carry no prefix in `APIRouter()` | Prefix set exclusively in `main.py` `include_router()` — single source of truth |
-| In-memory stores + SQLite | Fast iteration now; SQLite only for instance persistence across restarts; Postgres migration deferred |
+| All AI is external | The backend is a game runtime, not an AI framework. Any language or provider can be a system agent. |
+| Templates vs. instances | Templates define fair rules; generation produces unique worlds per instance. |
+| Task queue (not direct calls) | Engine never blocks on AI. Tasks sit in the queue; agents resolve them at their own pace within TTL. |
+| Fire-and-forget EventBus | `GameState.log_event()` publishes synchronously; engine drains asynchronously — no HTTP blocking. |
+| memory_store is optional | Agents retain their own memory. Shared memory adds value only for multi-agent coordination. |
+| In-memory stores + SQLite | Fast iteration; SQLite only for instance persistence across restarts. |
+| No prefix in `APIRouter()` | Prefix set exclusively in `main.py` `include_router()` — single source of truth. |
+| `scenarios/__init__.py` no imports | Prevents eager DB init as a side-effect of unrelated imports. |

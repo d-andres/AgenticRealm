@@ -6,97 +6,88 @@ Active task list. See [ARCHITECTURE.md](ARCHITECTURE.md) for full design context
 
 ## CRITICAL — Core Platform Value
 
-### 1. System Agent Framework
+### 1. System Agent Integration
 
-The platform's core promise — intelligent NPCs that respond dynamically to user agents.
+The task-queue model is live.  The next milestone is ensuring the round-trip
+(engine enqueues → agent resolves → engine applies) works end-to-end with a
+real external agent.
 
-- [ ] Create `SystemAgent` base class (`backend/agents/base.py`):
-  - `perceive(world_state, agent_context) -> dict`
-  - `decide(perception, decision_maker) -> dict`  *(pluggable — any provider)*
-  - `act(action, world_state) -> dict`
-- [ ] NPC roles and their behaviors are defined by the scenario template and generated per instance — `SystemAgent` must be generic enough to represent any role
-- [x] Rule-based decision-maker (baseline — deterministic, no LLM):
-  - `_rule_based_decision_maker` implemented in `scenarios/generator.py`
-- [x] Store generated NPC instances inside `ScenarioInstance` alongside `GameState`
-- [x] NPC state: position, inventory, `trust_levels[agent_id]`, generated role attributes
-  - Trust delta applied per tick via `engine._apply_npc_update()`; full inventory mutation pending
+- [x] Engine enqueues `npc_reaction` tasks when player events are queued
+- [x] Engine enqueues `npc_idle` tasks every 15 ticks (≈30 s)
+- [x] `GET /instances/{id}/npc-tasks` — external agents poll pending tasks
+- [x] `POST /instances/{id}/npc-tasks/{task_id}/resolve` — agent submits decision
+- [x] `_apply_npc_update()` writes trust, mood, last_ai_message, patrol_target to NPC entity
+- [x] Task TTL (12 s) — expired tasks silently dropped; world continues
+- [ ] End-to-end test: minimal Python polling agent → resolves tasks → confirm NPC state changes visible in `observe`
+- [ ] Document a reference `npc_admin` agent implementation in `backend/clients/`
 
 ### 2. Scenario Generator Parsers
 
-Parsers implemented in `scenarios/generator.py`:
-
-- [x] `_parse_generated_stores()` — converts AI output → `GeneratedStore` objects
-- [x] `_parse_generated_npcs()` — converts AI output → `GeneratedNPC` objects
+- [x] `_parse_generated_stores()` — converts generation output → `GeneratedStore` objects
+- [x] `_parse_generated_npcs()` — converts generation output → `GeneratedNPC` objects
 - [x] `_assign_items_to_stores()` — distributes items across store inventories
-- [x] Wire instance creation endpoint to call `ScenarioGenerator` with template
+- [x] Rule-based decision-maker (baseline — deterministic, no LLM)
 
 ### 3. Engine Orchestration for Market Actions
 
 - [x] Event Bus (`core/event_bus.py`) — `GameState.log_event()` publishes `GameEvent`; engine drains per tick
-- [x] NPC AI Reaction Phase — engine groups queued events by NPC, dispatches `npc_reaction` to AI agent
-- [x] NPC Autonomous Phase — `npc_idle` dispatched every 30 ticks per NPC; `asyncio.wait_for` 8 s cap
-- [x] `_apply_npc_update()` — writes `trust_delta`, `mood`, `last_ai_message`, `patrol_target` to NPC entity
-- [x] Connect full action pipeline: validate action against template `ActionType` list → execute → return combined state
-  - `process_action` validates against `scenario.allowed_actions` before turn increment; invalid actions cost 0 turns
-  - `POST /instances/{instance_id}/action` route added to `routes/scenarios.py`
-  - `GameSessionManager.get_session_by_instance_agent()` added for route → session lookup
-- [x] Action handlers: one per `ActionType` defined in the scenario template
-  - `move`, `observe`, `talk`, `negotiate`, `buy`, `hire`, `steal`, `trade` all implemented in `game_session.py`
-- [x] Pricing and hire/steal outcome calculations based on NPC-generated attributes
-  - `_handle_negotiate`: price floor adjusts ±7.5% based on NPC `trust` property
-  - `_handle_buy`: effective price adjusts up to ±5% based on store `trust`
-  - `_handle_hire`: hire cost discounted up to 20% at max trust
-  - `_handle_steal`: hired guard neutralised; trust adds +10% success bonus
+- [x] NPC Apply Phase — drain resolved tasks from `NpcTaskQueue`; apply to NPC entity
+- [x] NPC Reaction Phase — group queued events by NPC; enqueue `npc_reaction` task per NPC
+- [x] NPC Autonomous Phase — enqueue `npc_idle` task every 15 ticks per unhandled NPC
+- [x] `_apply_npc_update()` — writes `trust_delta`, `mood`, `last_ai_message`, `patrol_target`
+- [x] Full action pipeline: validate → execute → return combined state
+- [x] Action handlers: `move`, `observe`, `talk`, `negotiate`, `buy`, `hire`, `steal`, `trade`
+- [x] Trust-based pricing: `negotiate`, `buy`, `hire`, `steal` all read NPC `trust`
 
 ---
 
 ## HIGH — Core Platform Features
 
-- [ ] `SystemAgent` base class — `perceive → decide → act` loop driven by generated NPC attributes
-- [x] Trust-based pricing and outcome calculations
-  - `_handle_negotiate`, `_handle_buy`, `_handle_hire`, `_handle_steal` all read NPC `trust` property from engine tick updates
-  - See CRITICAL §3 for implementation details
-- [ ] AI-driven action outcomes — route `negotiate`, `trade`, `hire` decisions to `NPC_ADMIN` agent for authentic acceptance logic (currently deterministic with trust modifier)
-- [ ] Negotiation feedback — explain why offers were accepted or rejected (requires NPC_ADMIN response surfaced in action reply)
+- [x] NPC position updates on each tick (`patrol_target` applied to NPC coordinates via `_apply_patrol_movement` in engine)
+- [x] Instance world state persisted to SQLite after every player action and after every engine Apply Phase that resolves NPC tasks
+- [x] **Bug fix**: Reaction Phase now resolves `store_id` events and includes `type='store'` entities — store interactions (buy/negotiate/steal) now correctly trigger `npc_reaction` tasks for the shopkeeper
+- [x] **Bug fix**: `max_turns` removed from `ScenarioInstance.state.properties` and score formula; no longer leaks into external agent task context
+- [ ] AI-driven action outcomes — route `negotiate`, `trade`, `hire` decisions through resolved task context for authentic acceptance logic (currently deterministic with trust modifier)
+- [ ] Negotiation feedback — explain why offers were accepted or rejected (requires `last_ai_message` surfaced in action reply)
 - [ ] SSE / WebSocket push for live NPC state (replace polling)
-- [ ] Leaderboard persistence — store completed instance game outcomes and strategy analysis
+- [ ] Leaderboard persistence — store completed instance outcomes and strategy analysis
 - [ ] Tests for scenario instance interactions (agent actions, NPC responses, action validation)
-- [ ] Instance snapshot improvements — persist NPC trust/inventory changes across restarts
 
 ---
 
 ## MEDIUM — Admin & Usability
 
-- [ ] System prompt library at `backend/prompts/` — per-scenario NPC decision templates (generated at instance creation)
-- [ ] Decision-maker factory — swap rule-based → OpenAI → Anthropic via config
+- [ ] Reference system agent implementations in `backend/clients/`:
+  - `npc_admin_client.py` — minimal polling loop example
+  - `storyteller_client.py` — writes narrative to shared memory
 - [ ] Admin CLI — reset NPC trust, replenish inventory, inspect instance state
-- [ ] Trust level and pricing visualization in frontend dashboard
+- [ ] Trust level and NPC state visualization in frontend dashboard
+- [ ] Additional scenario templates (street negotiation, economic trading chain, heist)
 
 ---
 
 ## LOWER — Nice to Have
 
-- [ ] LLM-powered NPC decisions for live scenarios (plug OpenAI/Anthropic into `decide()`)
 - [ ] Replay system — decision-by-decision analysis, compare agent to optimal path
-- [ ] Additional scenario templates: street negotiation, economic trading chain, heist
 - [ ] Strategic feedback — tell agents why their approach worked or failed
+- [ ] Memory store usage examples — show how `storyteller` + `npc_admin` can share context
 
 ---
 
 ## Technical Notes
 
 **Current State**
-- Backend fully reorganized: `scenarios/`, `store/`, `routes/` packages; `main.py` is a thin entry point
-- Scenario instances persist via SQLite; `generate_world_entities()` generates stores, NPCs, items on creation (rule-based fallback, ~0.5 s)
-- `core/event_bus.py` — pub/sub `GameEvent` queue; `GameState.log_event()` publishes when `_instance_id` is set
-- `core/engine.py` — `_instances` registry; Reaction Phase dispatches `npc_reaction` per NPC when events queued; Autonomous Phase dispatches `npc_idle` every 30 ticks; all AI calls are async and timeout-guarded
-- Both OpenAI and Anthropic NPC_ADMIN agents implement `npc_reaction` and `npc_idle`
-- Action pipeline complete: `process_action` validates against `scenario.allowed_actions` (invalid actions cost 0 turns); all 8 action handlers implemented with trust-based dynamic pricing
-- `POST /instances/{instance_id}/action` route live; addressed by `(instance_id, agent_id)` pair via `get_session_by_instance_agent()`
-- Feed store and analytics work; keep backward-compatible while adding SSE
-- Frontend expects WebSocket but backend has none — add once SSE/push is prioritised
+- Backend is a pure game runtime — no LLM calls, no API keys stored
+- All AI (player and system) is external; agents connect via `POST /agents/register` with a `role` field
+- Engine 3-phase tick: Apply (drain resolved tasks) → Reaction (enqueue npc_reaction) → Autonomous (enqueue npc_idle every 15 ticks)
+- `NpcTask` TTL = 12 s; expired tasks silently dropped
+- `store/task_queue.py` — `NpcTaskQueue` singleton; `store/memory_store.py` — optional shared blackboard
+- Agent roles: `player`, `npc_admin`, `scenario_generator`, `storyteller`, `game_master`, `judge`
+- `SYSTEM_ROLES` set in `store/agent_store.py`; `is_system_agent` property auto-derived from role
+- Action pipeline complete: `process_action` validates against `scenario.allowed_actions`; all 8 handlers implemented with trust-based dynamic pricing
+- Frontend is a simulation host screen — shows connected agents (by role), scenario selector, join key, world map, activity log
 
 **Architecture Constraints**
 - `scenarios/__init__.py` intentionally does NOT import from `instances.py` (prevents eager DB init)
-- Routes set no prefix in `APIRouter()` — prefix is set exclusively in `main.py`
-- Decision-maker signature: `(generation_type: str, context: dict) -> dict`
+- No prefix in `APIRouter()` — prefix set exclusively in `main.py` `include_router()`
+- `ai_agents/` package retained on disk but is no longer imported by the engine or any route

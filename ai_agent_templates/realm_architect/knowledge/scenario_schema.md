@@ -17,7 +17,6 @@ This is the main object you must return.
   "world_height": "integer (default: 600)",
   "starting_position": "[x, y] (integer array)",
   "starting_gold": "integer",
-  "max_turns": "integer",
   
   "stores": "[Array of GeneratedStore objects]",
   "npcs": "[Array of GeneratedNPC objects]",

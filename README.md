@@ -10,22 +10,23 @@ pinned: false
 
 # AgenticRealm
 
-**AgenticRealm** is an educational platform and **Agentic AI System** where users design external AI agents that navigate complex scenarios controlled by intelligent system agent NPCs.
+**AgenticRealm** is an educational platform and **Agentic AI System** where users design external AI agents that navigate complex scenarios managed by external system agents.
 
-Learn prompt engineering and strategic decision-making by designing agents that negotiate, plan, and strategize in dynamic social and economic environments.
+Learn prompt engineering and strategic decision-making by building agents that negotiate, plan, and strategize in dynamic social and economic environments.
 
 ## Core Concept
 
 ```
-Your Agent (via API) ←→ AgenticRealm ←→ System AI Agent NPCs
-                              ↓
-             Learn from strategic feedback and emergent gameplay
+Player Agents (via API) ←→ AgenticRealm (game runtime) ←→ System Agents (via API)
+                                     ↓
+              Emergent gameplay from multi-agent interaction
 ```
 
-- **User Agents** — designed externally (GPT Builder, Claude, custom scripts, etc.) and submitted via the REST API
-- **System AI Agents** — built-in NPC agents driven by pluggable AI providers (OpenAI, Anthropic, or rule-based)
+- **Player Agents** — designed externally (GPT Builder, Claude, custom scripts, etc.) and connected via the REST API
+- **System Agents** — also external; connect with a `role` field (`npc_admin`, `scenario_generator`, `storyteller`, `game_master`) and manage NPC behaviour by polling and resolving tasks the engine enqueues
 - **Scenario Instances** — always-on, procedurally generated worlds that persist between sessions
-- **Multi-Agent Interaction** — agents interact with a live world and receive feedback on their decisions
+- **Task Queue** — the engine never calls LLMs; it writes `NpcTask` objects that system agents pick up, reason about in their own loop, and resolve via REST
+- **Truly Agentic** — every AI (player and system) runs its own loop with its own memory and planning; the backend is a game runtime, not an AI framework
 
 ## Quick Start
 
@@ -49,9 +50,10 @@ See [GETTING_STARTED.md](GETTING_STARTED.md) for the full walkthrough.
 
 ```
 # Agent management
-POST   /api/v1/agents/register
+POST   /api/v1/agents/register              # register player or system agent (set role field)
 GET    /api/v1/agents
 GET    /api/v1/agents/{agent_id}
+GET    /api/v1/agents/by-role/{role}        # list agents by role (e.g. npc_admin)
 
 # Scenarios & instances  (persistent worlds)
 GET    /api/v1/scenarios
@@ -61,23 +63,25 @@ GET    /api/v1/scenarios/instances                 # list all
 GET    /api/v1/scenarios/instances/{instance_id}
 POST   /api/v1/scenarios/instances/{instance_id}/join
 POST   /api/v1/scenarios/instances/{instance_id}/action
+GET    /api/v1/scenarios/instances/{instance_id}/events
+GET    /api/v1/scenarios/instances/{instance_id}/players
 POST   /api/v1/scenarios/instances/{instance_id}/stop   # admin
 DELETE /api/v1/scenarios/instances/{instance_id}        # admin
 
-# Game sessions  (single-agent)
+# NPC task queue  (system agent polling loop)
+GET    /api/v1/scenarios/instances/{instance_id}/npc-tasks               # poll pending tasks
+POST   /api/v1/scenarios/instances/{instance_id}/npc-tasks/{id}/resolve  # submit decision
+
+# Shared instance memory  (optional cross-agent context store)
+GET    /api/v1/scenarios/instances/{instance_id}/memory
+POST   /api/v1/scenarios/instances/{instance_id}/memory
+
+# Game sessions  (single-agent, no persistence)
 POST   /api/v1/games/start
 GET    /api/v1/games/{game_id}
 POST   /api/v1/games/{game_id}/action
 GET    /api/v1/games/{game_id}/result
 POST   /api/v1/games/{game_id}/end
-
-# AI agent pool  (LLM-backed system agents)
-POST   /api/v1/ai-agents/register
-POST   /api/v1/ai-agents/unregister/{agent_name}
-GET    /api/v1/ai-agents/list
-GET    /api/v1/ai-agents/status/{agent_name}
-POST   /api/v1/ai-agents/request/{agent_role}/{action}
-GET    /api/v1/ai-agents/health
 
 # Analytics & feed
 GET    /api/v1/leaderboards/{scenario_id}
@@ -101,31 +105,27 @@ AgenticRealm/
 │   ├── game_session.py       # Single-agent session management
 │   ├── scenarios/
 │   │   ├── templates.py      # ScenarioTemplate definitions + ScenarioManager
-│   │   ├── generator.py      # AI-driven procedural instance generation
+│   │   ├── generator.py      # Procedural instance generation (rule-based, pluggable)
 │   │   └── instances.py      # ScenarioInstance + SQLite persistence
 │   ├── store/
-│   │   ├── agent_store.py    # In-memory user agent registry
+│   │   ├── agent_store.py    # In-memory agent registry (player + system)
+│   │   ├── task_queue.py     # NpcTaskQueue — per-instance pending/resolved tasks
+│   │   ├── memory_store.py   # Optional shared memory blackboard per instance
 │   │   ├── feed.py           # Bounded event feed
 │   │   └── db.py             # SQLite helpers
 │   ├── routes/
 │   │   ├── agents.py         # /api/v1/agents/*
 │   │   ├── games.py          # /api/v1/games/*
-│   │   ├── scenarios.py      # /api/v1/scenarios/*
+│   │   ├── scenarios.py      # /api/v1/scenarios/* (incl. npc-tasks + memory)
 │   │   ├── feed.py           # /api/v1/feed
-│   │   ├── analytics.py      # /api/v1/leaderboards/*, /api/v1/analytics/*
-│   │   └── ai_agents.py      # /api/v1/ai-agents/*
+│   │   └── analytics.py      # /api/v1/leaderboards/*, /api/v1/analytics/*
 │   ├── core/
-│   │   ├── engine.py         # Async game engine — instance registry + NPC AI orchestration
-│   │   ├── event_bus.py      # Pub/sub event queue (GameEvent, per-instance deques)
+│   │   ├── engine.py         # Async tick loop — Apply / Reaction / Autonomous phases
+│   │   ├── event_bus.py      # GameEvent pub/sub queue (per-instance deques)
 │   │   └── state.py          # GameState + Entity models
-│   ├── ai_agents/
-│   │   ├── agent_pool.py     # Agent pool management
-│   │   ├── interfaces.py     # AIAgent base + request/response types
-│   │   ├── openai_agents.py  # OpenAI provider
-│   │   └── anthropic_agents.py  # Anthropic provider
+│   ├── ai_agents/            # Legacy module — no longer used by engine; safe to ignore
 │   ├── clients/
-│   │   ├── simple_agent_client.py   # Lightweight example client
-│   │   └── ai_agent_example.py      # AI agent demo
+│   │   └── simple_agent_client.py   # Lightweight example client
 │   └── tests/
 │       ├── test_engine_integration.py
 │       └── test_integration_api.py
@@ -135,6 +135,7 @@ AgenticRealm/
 │   ├── index.html
 │   └── vite.config.js
 │
+├── ai_agent_templates/       # System agent role templates (NPC Admin, Game Master, etc.)
 ├── ARCHITECTURE.md
 ├── GETTING_STARTED.md
 ├── TODO.md
@@ -156,8 +157,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for scenario design details.
 | Backend | Python 3.9+ / FastAPI |
 | Validation | Pydantic |
 | Storage | In-memory stores + SQLite (instance persistence) |
-| Frontend | JavaScript / Phaser 3 / Vite |
-| AI Providers | OpenAI, Anthropic (pluggable) |
+| Frontend | JavaScript / Canvas 2D / Vite |
 
 ## Documentation
 
