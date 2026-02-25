@@ -219,38 +219,12 @@
   <div id="setup-main">
 
     <div class="card">
-      <h2>System AI Agents <span>— required for AI-driven NPC behaviour &amp; world generation</span></h2>
-      <div class="row">
-        <div class="field">
-          <label>Provider</label>
-          <select id="ai-type">
-            <option value="openai">OpenAI</option>
-            <option value="anthropic">Anthropic</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Role</label>
-          <select id="ai-role">
-            <option value="npc_admin">NPC Admin</option>
-            <option value="scenario_generator">Scenario Generator</option>
-          </select>
-        </div>
-        <div class="field" style="flex:2;">
-          <label>API Key</label>
-          <input type="password" id="ai-key" placeholder="sk-…">
-        </div>
-        <div class="field">
-          <label>Model</label>
-          <input type="text" id="ai-model" placeholder="gpt-4o">
-        </div>
-      </div>
-      <div class="btn-row">
-        <button class="btn" onclick="App.registerAIAgent()">Register Agent</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>Registered Agents</h2>
+      <h2>System Agents <span>— connect external agents via the REST API</span> <button class="btn" style="font-size:10px;padding:3px 10px;margin-left:8px;" onclick="App.refreshAgentList()">Refresh</button></h2>
+      <p class="muted" style="margin-bottom:0.75rem;">
+        System agents (NPC admin, scenario generator, storyteller, game master) register themselves
+        using <code>POST /api/v1/agents/register</code> with a <code>role</code> field and join instances
+        just like player agents.  No API key is stored here.
+      </p>
       <div id="agent-list"><div class="muted">Loading…</div></div>
     </div>
 

@@ -2,7 +2,7 @@
  * AgenticRealm Frontend — Simulation Host
  *
  * Flow:
- *   View 1 (Setup)      → register system AI agents → generate world
+ *   View 1 (Setup)      → external system agents connect via REST → generate world
  *   View 2 (Simulation) → host screen:
  *                          world map canvas | join key + player list + activity log
  *
@@ -13,9 +13,10 @@
 const API = '/api/v1';
 
 // ── State ──────────────────────────────────────────────────────────
-let instanceId   = null;
-let genPollTimer = null;
-let simTimer     = null;
+let instanceId       = null;
+let genPollTimer     = null;
+let simTimer         = null;
+let agentPollTimer   = null;   // auto-refresh agent list on setup screen
 let _shownEvents = 0;   // tracks how many events we have already displayed
 let _scenarios   = [];  // cached scenario list from API
 let _selectedScenario = null;  // currently selected ScenarioResponse object
@@ -102,52 +103,44 @@ function onScenarioChange() {
   }
 }
 
-async function registerAIAgent() {
-  const type  = document.getElementById('ai-type').value;
-  const role  = document.getElementById('ai-role').value;
-  const key   = document.getElementById('ai-key').value.trim();
-  const model = document.getElementById('ai-model').value.trim();
-
-  if (!key) { logSetup('API key is required.', 'err'); return; }
-  logSetup(`Registering ${type} ${role} agent…`, 'info');
-  try {
-    const d = await apiFetch('/ai-agents/register', {
-      method: 'POST',
-      body: JSON.stringify({
-        agent_name: `${type}-${role}`,
-        agent_role: role,
-        agent_type: type,
-        config: { api_key: key, model: model || undefined },
-      }),
-    });
-    logSetup(`✓ ${d.message}`, 'ok');
-    await refreshAgentList();
-  } catch (e) {
-    logSetup(`✗ ${e.message}`, 'err');
-  }
-}
-
 async function refreshAgentList() {
+  const el = document.getElementById('agent-list');
+  if (!el) return;
   try {
-    const d = await apiFetch('/ai-agents/list');
-    const el = document.getElementById('agent-list');
-    if (!d.agents || d.agents.length === 0) {
-      el.innerHTML = '<div class="muted">No agents registered.</div>';
-      logSetup(
-        'WARNING: No system AI agents connected. World will be generated using hardcoded random entities (test mode). Register an agent above for AI-driven generation.',
-        'err'
-      );
+    // Fetch system-role agents and all player agents in parallel
+    const SYSTEM_ROLES = ['npc_admin', 'scenario_generator', 'storyteller', 'game_master'];
+    const [byRoleResults, allAgents] = await Promise.all([
+      Promise.all(SYSTEM_ROLES.map(r =>
+        apiFetch(`/agents/by-role/${r}`).then(d => d.agents || []).catch(() => [])
+      )),
+      apiFetch('/agents').then(d => Array.isArray(d) ? d : (d.agents || [])).catch(() => []),
+    ]);
+
+    const systemAgents = byRoleResults.flat();
+    const playerAgents = allAgents.filter(a => !a.is_system_agent);
+
+    if (systemAgents.length === 0 && playerAgents.length === 0) {
+      el.innerHTML = '<div class="muted">No agents connected.  Start an external agent and register it with role <code>npc_admin</code>.</div>';
       return;
     }
-    el.innerHTML = d.agents.map(a => `
-      <div class="agent-row">
-        <span class="a-dot ${a.is_connected ? 'ok' : 'err'}">●</span>
-        <span>${a.agent_name}</span>
-        <span class="muted">${a.agent_role}</span>
-      </div>`).join('');
+
+    const rows = [...systemAgents, ...playerAgents].map(a => {
+      const roleLabel = a.role || 'player';
+      const dotClass  = a.is_system_agent ? 'ok' : '';
+      return `<div class="agent-row">
+        <span class="a-dot ${dotClass}">●</span>
+        <span>${a.name || a.agent_id}</span>
+        <span class="muted">${roleLabel}</span>
+      </div>`;
+    });
+
+    if (systemAgents.length === 0) {
+      rows.unshift('<div class="muted" style="margin-bottom:0.5rem;">No system agents yet — NPC behaviour will be minimal.</div>');
+    }
+
+    el.innerHTML = rows.join('');
   } catch {
-    document.getElementById('agent-list').innerHTML =
-      '<div class="muted">Could not load agents.</div>';
+    el.innerHTML = '<div class="muted">Could not load agents.</div>';
   }
 }
 
@@ -158,16 +151,6 @@ async function generateWorld() {
   }
   const scenarioId = _selectedScenario.scenario_id;
 
-  // Warn clearly if no AI agents are registered
-  try {
-    const d = await apiFetch('/ai-agents/list');
-    if (!d.agents || d.agents.length === 0) {
-      logSetup(
-        'No system AI agents connected — generating world with hardcoded random entities (test/fallback mode).',
-        'err'
-      );
-    }
-  } catch { /* non-fatal — proceed */ }
 
   logSetup(`Generating world from “${_selectedScenario.name}”…`, 'info');
   try {
@@ -201,6 +184,9 @@ function startGenPoll() {
 // ── VIEW 2 — Simulation ────────────────────────────────────────────
 
 function enterSimulation() {
+  // Stop the setup-screen agent poller — no longer needed
+  if (agentPollTimer) { clearInterval(agentPollTimer); agentPollTimer = null; }
+
   // Update sim header tag with the selected scenario name
   const tag = document.getElementById('sim-scenario-tag');
   if (tag && _selectedScenario) tag.textContent = _selectedScenario.name;
@@ -481,10 +467,10 @@ function renderPlayers(players) {
 // ── Expose ─────────────────────────────────────────────────────────
 
 window.App = {
-  registerAIAgent,
   generateWorld,
   copyJoinKey,
   onScenarioChange,
+  refreshAgentList,
 };
 
 // ── Boot ─────────────────────────────────────────────────────
@@ -492,4 +478,8 @@ window.App = {
 checkAPI();
 refreshAgentList();
 loadScenarios();
+
+// Periodically refresh the agent list while on the setup screen so
+// operators can see external agents connect without reloading the page.
+agentPollTimer = setInterval(refreshAgentList, 5000);
 
