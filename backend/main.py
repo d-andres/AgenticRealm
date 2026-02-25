@@ -15,14 +15,12 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from core.engine import GameEngine, set_engine
-from ai_agents.agent_pool import get_agent_pool, shutdown_agent_pool
 from routes import (
     agents_router,
     games_router,
     scenarios_router,
     feed_router,
     analytics_router,
-    ai_agents_router,
 )
 from scenarios.templates import ScenarioManager
 
@@ -33,10 +31,13 @@ load_dotenv()
 app = FastAPI(
     title="AgenticRealm API",
     description=(
-        "Agentic AI Learning Platform: external user agents interact with "
-        "system AI agents (OpenAI/Anthropic) inside procedurally generated scenarios."
+        "Agentic AI Learning Platform — external agents (player and system) "
+        "connect via REST to interact inside procedurally generated scenarios. "
+        "System agents (npc_admin, storyteller, game_master, etc.) register "
+        "with POST /api/v1/agents/register and poll for NPC tasks just like "
+        "player agents."
     ),
-    version="0.1.0",
+    version="0.2.0",
 )
 
 app.add_middleware(
@@ -54,7 +55,6 @@ app.include_router(games_router,     prefix="/api/v1/games")
 app.include_router(scenarios_router, prefix="/api/v1/scenarios")
 app.include_router(feed_router,      prefix="/api/v1")
 app.include_router(analytics_router, prefix="/api/v1")
-app.include_router(ai_agents_router, prefix="/api/v1/ai-agents")
 
 # ---- Static frontend (served when built dist is present) -----------
 
@@ -103,7 +103,6 @@ async def get_info():
             "agents": "/api/v1/agents",
             "scenarios": "/api/v1/scenarios",
             "games": "/api/v1/games",
-            "ai_agents": "/api/v1/ai-agents",
             "feed": "/api/v1/feed",
         },
     }
@@ -117,25 +116,18 @@ set_engine(engine)  # register as global singleton for scenarios/instances.py
 
 @app.on_event('startup')
 async def startup_event():
-    print("[Main] Initializing AI agent pool...")
-    pool = await get_agent_pool()
-    print(f"[Main] Agent pool ready (id={id(pool)})")
     try:
         await engine.start()
+        print("[Main] Game engine started.")
     except Exception as e:
         print(f"[Main] Failed to start engine: {e}")
 
 
 @app.on_event('shutdown')
 async def shutdown_event():
-    print("[Main] Shutting down AI agent pool...")
-    try:
-        await shutdown_agent_pool()
-        print("[Main] Agent pool shutdown complete")
-    except Exception as e:
-        print(f"[Main] Agent pool shutdown error: {e}")
     try:
         await engine.stop()
+        print("[Main] Game engine stopped.")
     except Exception as e:
         print(f"[Main] Engine stop error: {e}")
 

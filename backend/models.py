@@ -36,6 +36,8 @@ class AgentResponse(BaseModel):
     description: str
     creator: str
     model: str
+    role: str = "player"
+    is_system_agent: bool = False
     skills: Dict[str, int]
     created_at: datetime
     

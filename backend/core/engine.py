@@ -1,37 +1,35 @@
 """
 Game Engine — Simulation loop orchestrator.
 
-Each tick processes every active ScenarioInstance through two phases:
+Each tick processes every active ScenarioInstance through three phases:
+
+  Apply Phase
+    Drain NpcTaskQueue for resolved tasks submitted by external agents.
+    Apply each resolution to the relevant NPC entity.
 
   Reaction Phase
     Drain the EventBus queue for the instance.
     Group events by target NPC.
-    Dispatch a batched "npc_reaction" request to the NPC_ADMIN AI agent.
-    AI updates are applied asynchronously via fire-and-forget tasks.
+    Enqueue an NpcTask of type "npc_reaction" for each affected NPC.
+    External npc_admin agents poll GET /instances/{id}/npc-tasks and
+    resolve tasks via POST /instances/{id}/npc-tasks/{task_id}/resolve.
+    Tasks not resolved within TASK_TTL_SECONDS are expired silently.
 
-  Autonomous Phase  (every _AI_IDLE_EVERY_TICKS ticks)
-    Each NPC that was not already handled in the reaction phase receives a
-    "npc_idle" request so it can patrol, change mood, or update dialogue.
+  Autonomous Phase  (every _NPC_IDLE_EVERY_TICKS ticks)
+    Each NPC that was not already handled in the reaction phase receives
+    an "npc_idle" task so external agents can drive patrol/mood/dialogue.
 
-Cost controls:
-  - AI is only called when there are queued events OR on the idle interval.
-  - Multiple events for the same NPC are merged into a single request.
-  - Each AI call is capped at _AI_CALL_TIMEOUT seconds; timed-out calls are
-    silently dropped — the deterministic result already reached the player.
-  - Idle interval defaults to 30 ticks (≈30 s at tick_rate=1.0).
-
-The player's HTTP request is never blocked by AI calls.
+This design makes all AI decision-making external and truly agentic:
+  - External agents run their own loop with memory and planning
+  - The backend never blocks on AI; it only stores and dispatches tasks
+  - Any language, framework, or service can act as a system agent
 """
 
 import asyncio
 from typing import Any, Dict, List, Optional
 
-# How often (in engine ticks) each NPC gets an autonomous "idle" AI call.
-# At tick_rate=1.0 this means roughly once every 30 seconds per NPC.
-_AI_IDLE_EVERY_TICKS: int = 30
-
-# Maximum seconds to wait for a single NPC_ADMIN AI response before discarding.
-_AI_CALL_TIMEOUT: float = 8.0
+# How often (in engine ticks) each NPC gets an autonomous "idle" task.
+_NPC_IDLE_EVERY_TICKS: int = 15
 
 
 class GameEngine:
@@ -113,14 +111,9 @@ class GameEngine:
         if not active:
             return  # no active instances → silent tick
 
-        try:
-            pool = await self._get_pool()
-        except Exception:
-            pool = None
-
         for instance in active:
             try:
-                await self._process_instance(instance, pool)
+                await self._process_instance(instance)
             except Exception as e:
                 print(f"[Engine] Error in instance {instance.instance_id[:8]}: {e}")
 
@@ -128,120 +121,138 @@ class GameEngine:
     # Per-instance processing
     # ------------------------------------------------------------------
 
-    async def _process_instance(self, instance: Any, pool: Any) -> None:
+    async def _process_instance(self, instance: Any) -> None:
         from core.event_bus import event_bus
-        from ai_agents.interfaces import AgentRole
+        from store.task_queue import npc_task_queue
 
-        events = event_bus.drain_instance(instance.instance_id)
-
-        # Check whether NPC_ADMIN is available before attempting any dispatch
-        npc_admin_available = (
-            pool is not None
-            and AgentRole.NPC_ADMIN in pool.agents
-            and len(pool.agents[AgentRole.NPC_ADMIN]) > 0
-        )
+        # ---- Apply Phase -------------------------------------------
+        # Pull any tasks that external agents have already resolved and
+        # apply their NPC updates to the live world state.
+        applied = 0
+        for task in npc_task_queue.drain_resolved(instance.instance_id):
+            if task.resolution:
+                self._apply_npc_update(instance, task.npc_id, task.resolution)
+                applied += 1
+        # Persist any NPC state changes (trust, mood, dialogue) to SQLite.
+        if applied:
+            try:
+                import store.db as db
+                db.save_instance_dict(instance.to_dict())
+            except Exception:
+                pass
 
         # ---- Reaction Phase ----------------------------------------
-        # Group queued events by the target NPC so multiple events from one
-        # player turn are batched into a single AI request.
+        events = event_bus.drain_instance(instance.instance_id)
         npc_events: Dict[str, List[Any]] = {}
-        if npc_admin_available:
-            for ev in events:
-                npc_id = ev.data.get('npc_id') or ev.data.get('target_npc_id')
-                if not npc_id:
-                    continue
-                npc = instance.state.entities.get(npc_id)
-                if not npc or npc.type != 'npc':
-                    continue
-                npc_events.setdefault(npc_id, []).append(ev)
+        for ev in events:
+            # Resolve the affected entity from whichever ID field was logged.
+            # store actions (buy, negotiate, steal) log store_id; NPC actions log npc_id.
+            entity_id = (
+                ev.data.get('npc_id')
+                or ev.data.get('store_id')
+                or ev.data.get('target_npc_id')
+                or ev.data.get('entity_id')
+            )
+            if not entity_id:
+                continue
+            npc = instance.state.entities.get(entity_id)
+            # Include both free-roaming NPCs and store proprietors (type='store').
+            if not npc or npc.type not in ('npc', 'store'):
+                continue
+            npc_events.setdefault(entity_id, []).append(ev)
 
-            for npc_id, evs in npc_events.items():
-                npc = instance.state.entities[npc_id]
-                asyncio.create_task(
-                    self._dispatch_npc_reaction(pool, instance, npc, evs)
-                )
+        for npc_id, evs in npc_events.items():
+            npc = instance.state.entities[npc_id]
+            npc_task_queue.enqueue(
+                instance_id=instance.instance_id,
+                task_type="npc_reaction",
+                npc_id=npc_id,
+                context=self._build_npc_context(npc, instance, events=evs),
+            )
 
-        # ---- Autonomous Phase ---------------------------------------
-        # Fire once every _AI_IDLE_EVERY_TICKS ticks per NPC not already
-        # handled in the reaction phase this tick.
-        if npc_admin_available and (self.turn % _AI_IDLE_EVERY_TICKS == 0):
+        # ---- Autonomous Phase --------------------------------------
+        if self.turn % _NPC_IDLE_EVERY_TICKS == 0:
             for npc_id, npc in list(instance.state.entities.items()):
-                if npc.type != 'npc':
+                if npc.type not in ('npc', 'store'):
                     continue
                 if npc_id in npc_events:
-                    continue  # already handled above
-                asyncio.create_task(
-                    self._dispatch_npc_idle(pool, instance, npc)
+                    continue  # already queued a reaction task this tick
+                npc_task_queue.enqueue(
+                    instance_id=instance.instance_id,
+                    task_type="npc_idle",
+                    npc_id=npc_id,
+                    context=self._build_npc_context(npc, instance),
                 )
 
+        # ---- Movement Phase ----------------------------------------
+        # Apply patrol_target movement for all NPCs/stores that have one set.
+        self._apply_patrol_movement(instance)
+
     # ------------------------------------------------------------------
-    # AI dispatch helpers
+    # Context builder
     # ------------------------------------------------------------------
 
-    async def _dispatch_npc_reaction(
-        self, pool: Any, instance: Any, npc: Any, events: List[Any]
-    ) -> None:
-        """Ask NPC_ADMIN to react to one or more queued events for this NPC."""
-        from ai_agents.interfaces import AgentRole
-        try:
-            response = await asyncio.wait_for(
-                pool.request(
-                    role=AgentRole.NPC_ADMIN,
-                    action="npc_reaction",
-                    context={
-                        "npc_id":          npc.id,
-                        "npc_name":        npc.properties.get("name", npc.id),
-                        "npc_job":         npc.properties.get("job", "unknown"),
-                        "npc_personality": npc.properties.get("personality", "neutral"),
-                        "npc_trust":       npc.properties.get("trust", 0.5),
-                        "npc_health":      npc.properties.get("health", npc.properties.get("max_health", 100)),
-                        "npc_max_health":  npc.properties.get("max_health", 100),
-                        "npc_status":      npc.properties.get("status", "alive"),
-                        "events":          [{"type": ev.event_type, "data": ev.data} for ev in events],
-                        "instance_id":     instance.instance_id,
-                    },
-                ),
-                timeout=_AI_CALL_TIMEOUT,
-            )
-            if response and response.success:
-                self._apply_npc_update(instance, npc.id, response.result)
-        except asyncio.TimeoutError:
-            pass  # deterministic result already returned to player; skip
-        except Exception as e:
-            print(f"[Engine] NPC reaction error ({npc.id}): {e}")
+    def _build_npc_context(
+        self, npc: Any, instance: Any, events: Optional[List[Any]] = None
+    ) -> Dict[str, Any]:
+        """Build the context dict passed to an external agent's NPC task."""
+        ctx: Dict[str, Any] = {
+            "npc_id":          npc.id,
+            "npc_name":        npc.properties.get("name", npc.id),
+            "npc_job":         npc.properties.get("job", "unknown"),
+            "npc_personality": npc.properties.get("personality", "neutral"),
+            "npc_trust":       npc.properties.get("trust", 0.5),
+            "npc_mood":        npc.properties.get("mood", "neutral"),
+            "npc_health":      npc.properties.get("health", npc.properties.get("max_health", 100)),
+            "npc_max_health":  npc.properties.get("max_health", 100),
+            "npc_status":      npc.properties.get("status", "alive"),
+            "last_ai_message": npc.properties.get("last_ai_message", ""),
+            "world_turn":      self.turn,
+            "instance_id":     instance.instance_id,
+        }
+        if events:
+            ctx["events"] = [{"type": ev.event_type, "data": ev.data} for ev in events]
+        return ctx
 
-    async def _dispatch_npc_idle(
-        self, pool: Any, instance: Any, npc: Any
-    ) -> None:
-        """Ask NPC_ADMIN for autonomous idle/patrol behaviour."""
-        from ai_agents.interfaces import AgentRole
-        try:
-            response = await asyncio.wait_for(
-                pool.request(
-                    role=AgentRole.NPC_ADMIN,
-                    action="npc_idle",
-                    context={
-                        "npc_id":          npc.id,
-                        "npc_name":        npc.properties.get("name", npc.id),
-                        "npc_job":         npc.properties.get("job", "unknown"),
-                        "npc_personality": npc.properties.get("personality", "neutral"),
-                        "npc_trust":       npc.properties.get("trust", 0.5),
-                        "npc_mood":        npc.properties.get("mood", "neutral"),
-                        "npc_health":      npc.properties.get("health", npc.properties.get("max_health", 100)),
-                        "npc_max_health":  npc.properties.get("max_health", 100),
-                        "npc_status":      npc.properties.get("status", "alive"),
-                        "world_turn":      self.turn,
-                        "instance_id":     instance.instance_id,
-                    },
-                ),
-                timeout=_AI_CALL_TIMEOUT,
-            )
-            if response and response.success:
-                self._apply_npc_update(instance, npc.id, response.result)
-        except asyncio.TimeoutError:
-            pass
-        except Exception as e:
-            print(f"[Engine] NPC idle error ({npc.id}): {e}")
+    # ------------------------------------------------------------------
+    # NPC movement
+    # ------------------------------------------------------------------
+
+    def _apply_patrol_movement(self, instance: Any, speed: float = 8.0) -> None:
+        """Move entities that have a ``patrol_target`` set toward that target.
+
+        Called each tick after the Autonomous Phase.  When an NPC reaches its
+        target it clears ``patrol_target`` so it does not overshoot on the
+        following tick.  The speed parameter is world-units per tick.
+        """
+        for entity in instance.state.entities.values():
+            if entity.type not in ('npc', 'store'):
+                continue
+            target_id = entity.properties.get('patrol_target')
+            if not target_id:
+                continue
+            target = instance.state.entities.get(target_id)
+            if not target:
+                # Target entity no longer exists — clear the stale reference.
+                entity.properties['patrol_target'] = None
+                continue
+            dx = target.x - entity.x
+            dy = target.y - entity.y
+            dist = (dx ** 2 + dy ** 2) ** 0.5
+            if dist <= speed:
+                entity.x = target.x
+                entity.y = target.y
+                entity.properties['patrol_target'] = None
+            else:
+                entity.x = round(entity.x + (dx / dist) * speed, 1)
+                entity.y = round(entity.y + (dy / dist) * speed, 1)
+
+    # ------------------------------------------------------------------
+    # AI dispatch helpers (kept for reference — no longer used by engine)
+    # _dispatch_npc_reaction and _dispatch_npc_idle have been replaced by
+    # npc_task_queue.enqueue() calls in _process_instance.
+    # Resolutions are applied in the Apply Phase via _apply_npc_update.
+    # ------------------------------------------------------------------
 
     # ------------------------------------------------------------------
     # State mutation
@@ -294,13 +305,12 @@ class GameEngine:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    async def _get_pool(self) -> Any:
-        from ai_agents.agent_pool import get_agent_pool
-        return await get_agent_pool()
+    # _get_pool removed — the engine no longer calls LLM providers directly.
+    # All AI decisions are handled by external agents via the NpcTaskQueue.
 
 
 # ---------------------------------------------------------------------------
-# Module-level singleton accessor (mirrors the agent_pool pattern)
+# Module-level singleton
 # ---------------------------------------------------------------------------
 
 _engine_instance: Optional[GameEngine] = None

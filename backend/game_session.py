@@ -75,7 +75,6 @@ class GameSession:
             'world_height': self.scenario.world_height,
             'scenario_id': self.scenario_id,
             'scenario_name': self.scenario.name,
-            'max_turns': self.scenario.max_turns,
             'allowed_actions': [a.value for a in self.scenario.allowed_actions],
         })
 
@@ -235,9 +234,7 @@ class GameSession:
                     agent.x, agent.y = new_x, new_y
                     self.status = 'completed'
                     self.completed_at = datetime.now()
-                    turns_used = self.turn
-                    max_t = self.state.properties.get('max_turns', getattr(self.scenario, 'max_turns', 150))
-                    score = max(0.0, 100.0 - (turns_used / max_t) * 50)
+                    score = max(0.0, 100.0 - self.turn * 0.2)
                     agent.properties['score'] = score
                     self.state.log_event('exit_reached', {'entity_id': eid, 'score': score})
                     return True, f"Exit reached via '{eid}'! Scenario complete.", {'score': score}
@@ -281,8 +278,8 @@ class GameSession:
     # ------------------------------------------------------------------
     # Rich social / economic actions
     # All of these produce structured events and return observable results.
-    # When an NPC_ADMIN AI agent is connected via AgentPool it will provide
-    # the NPC response; until then a default neutral response is returned.
+    # NPC AI reactions are dispatched asynchronously by the engine on the
+    # next tick via the NpcTaskQueue; external npc_admin agents resolve them.
     # ------------------------------------------------------------------
 
     def _resolve_npc(self, params: Dict) -> Optional['Entity']:
@@ -417,7 +414,8 @@ class GameSession:
         if target and item_id == target:
             self.status = 'completed'
             self.completed_at = datetime.now()
-            agent.properties['score'] = max(0.0, 100.0 - (self.turn / max(1, self.state.properties.get('max_turns', 150))) * 30)
+            # Score based on gold efficiency: full marks for buying cheap, penalised by spend.
+            agent.properties['score'] = max(0.0, 100.0 - self.turn * 0.2)
         return True, f"Bought '{item.get('name', item_id)}' for {price} gold.", {
             'item': item, 'gold_remaining': agent.properties['gold']
         }
@@ -564,10 +562,6 @@ class GameSession:
     
     def get_state(self) -> Dict:
         """Get current game state"""
-        max_turns = self.state.properties.get(
-            'max_turns',
-            getattr(self.scenario, 'max_turns', 150) if self.scenario else 150
-        )
         world_w = self.state.properties.get(
             'world_width',
             getattr(self.scenario, 'world_width', 800) if self.scenario else 800
@@ -582,13 +576,11 @@ class GameSession:
             'agent_id': self.agent_id,
             'status': self.status,
             'turn': self.turn,
-            'max_turns': max_turns,
             'state': self.state,
             'scenario_info': {
                 'name': self.scenario.name if self.scenario else self.scenario_id,
                 'world_width': world_w,
                 'world_height': world_h,
-                'max_turns': max_turns,
                 'allowed_actions': self.state.properties.get('allowed_actions', []),
             }
         }
@@ -624,8 +616,6 @@ class GameSession:
         else:
             if self.status == 'failed':
                 return "Your agent was eliminated. Improve hazard avoidance or situational awareness."
-            elif self.scenario and self.turn >= self.scenario.max_turns:
-                return "Turn limit reached. Your agent needs faster decision-making or a clearer strategy."
             else:
                 return "Scenario incomplete. Review the objectives and available actions."
 

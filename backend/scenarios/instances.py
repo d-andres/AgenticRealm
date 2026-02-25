@@ -45,7 +45,6 @@ class ScenarioInstance:
             'world_height': self.scenario.world_height,
             'scenario_id': self.scenario_id,
             'scenario_name': self.scenario.name,
-            'max_turns': self.scenario.max_turns,
             'allowed_actions': [a.value for a in self.scenario.allowed_actions],
         })
         # Bind the state to this instance so GameState.log_event() publishes

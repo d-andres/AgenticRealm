@@ -8,14 +8,16 @@ before parameterised paths (/{scenario_id}) so FastAPI resolves them correctly.
 """
 
 from fastapi import APIRouter, HTTPException, Header, Query, BackgroundTasks
-from typing import List
+from pydantic import BaseModel
+from typing import Any, Dict, List, Optional
 from models import ScenarioResponse, ActionRequest, ActionResponse
 from store.agent_store import agent_store
+from store.task_queue import npc_task_queue
+from store.memory_store import memory_store
 from scenarios.templates import ScenarioManager
 from scenarios.instances import scenario_instance_manager
 from scenarios.generator import generate_world_entities
 from game_session import session_manager
-from ai_agents.agent_pool import get_agent_pool
 import os
 
 router = APIRouter(tags=["Scenarios"])
@@ -96,6 +98,156 @@ async def delete_scenario_instance(instance_id: str, x_admin_token: str = Header
     if not scenario_instance_manager.delete_instance(instance_id):
         raise HTTPException(status_code=404, detail="Instance not found")
     return {'instance_id': instance_id, 'deleted': True}
+
+
+@router.get("/instances/{instance_id}/npc-tasks", summary="Poll pending NPC decision tasks (npc_admin agents)")
+async def get_npc_tasks(instance_id: str, limit: int = Query(20, ge=1, le=100)):
+    """
+    Return up to ``limit`` pending NPC decision tasks for this instance.
+
+    Intended for external **npc_admin** agents that run their own reasoning
+    loop.  Each task represents an NPC that needs a decision (reaction to a
+    player action, or autonomous idle behaviour).  After reasoning, resolve
+    each task via ``POST /instances/{id}/npc-tasks/{task_id}/resolve``.
+
+    Tasks not resolved within their TTL are automatically expired by the
+    engine on the next tick.
+    """
+    inst = scenario_instance_manager.get_instance(instance_id)
+    if not inst:
+        raise HTTPException(status_code=404, detail="Instance not found")
+    tasks = npc_task_queue.get_pending(instance_id, limit=limit)
+    return {
+        "instance_id": instance_id,
+        "tasks": [t.to_dict() for t in tasks],
+        "count": len(tasks),
+    }
+
+
+class NpcTaskResolution(BaseModel):
+    """NPC update submitted by an external agent when resolving a task."""
+    agent_id: str
+    # Any subset of the fields below; all are optional.
+    # trust_delta     (float) — added to NPC current trust, clamped [0,1]
+    # health_delta    (float) — added to NPC current health, clamped [0,max]
+    # mood            (str)   — replaces current mood
+    # last_ai_message (str)   — dialogue line for next player observe
+    # patrol_target   (str)   — entity_id the NPC is moving toward
+    resolution: Dict[str, Any]
+
+
+@router.post("/instances/{instance_id}/npc-tasks/{task_id}/resolve",
+             summary="Submit an NPC decision (npc_admin agents)")
+async def resolve_npc_task(
+    instance_id: str,
+    task_id: str,
+    body: NpcTaskResolution,
+):
+    """
+    Submit the agent's decision for a pending NPC task.
+
+    The ``resolution`` dict may contain any combination of:
+    - ``trust_delta`` (float) — change in NPC trust toward player
+    - ``health_delta`` (float) — change in NPC health
+    - ``mood`` (str) — new NPC mood label
+    - ``last_ai_message`` (str) — NPC dialogue stored for next ``observe``
+    - ``patrol_target`` (str) — entity ID the NPC should move toward
+
+    The engine's next tick will drain resolved tasks and apply updates to
+    the live world state.  Memory entries written here are immediately
+    available to all other agents via ``GET /instances/{id}/memory``.
+    """
+    inst = scenario_instance_manager.get_instance(instance_id)
+    if not inst:
+        raise HTTPException(status_code=404, detail="Instance not found")
+
+    task = npc_task_queue.resolve(
+        instance_id=instance_id,
+        task_id=task_id,
+        resolution=body.resolution,
+        resolved_by=body.agent_id,
+    )
+    if not task:
+        raise HTTPException(
+            status_code=404,
+            detail="Task not found or already resolved/expired.",
+        )
+
+    # Persist NPC context to shared memory so other agents have history.
+    mem = memory_store.get_or_create(instance_id)
+    npc_name = task.context.get("npc_name", task.npc_id)
+    mem.write(
+        key=f"npc:{task.npc_id}:context",
+        value={
+            "task_type": task.task_type,
+            "resolution": body.resolution,
+            "world_turn": task.context.get("world_turn"),
+        },
+        agent_id=body.agent_id,
+    )
+
+    return {"task_id": task_id, "status": "resolved", "npc_id": task.npc_id}
+
+
+@router.get("/instances/{instance_id}/memory", summary="Read shared instance memory")
+async def get_instance_memory(
+    instance_id: str,
+    key: Optional[str] = Query(None, description="Exact key to read (returns last 20 entries)"),
+    prefix: Optional[str] = Query(None, description="Key prefix to search (returns latest per key)"),
+    n: int = Query(20, ge=1, le=200, description="Max entries per key"),
+):
+    """
+    Read shared memory for this instance.
+
+    Agents write context here (player interaction history, NPC notes, narrative
+    threads) so other agents can build on it.  Omit both ``key`` and ``prefix``
+    to get the latest entry for every key.
+    """
+    inst = scenario_instance_manager.get_instance(instance_id)
+    if not inst:
+        raise HTTPException(status_code=404, detail="Instance not found")
+
+    mem = memory_store.get_or_create(instance_id)
+    if key:
+        return {"instance_id": instance_id, "key": key, "entries": mem.read(key, n)}
+    if prefix:
+        return {"instance_id": instance_id, "prefix": prefix, "entries": mem.search(prefix)}
+    return {"instance_id": instance_id, "memory": mem.read_all_latest()}
+
+
+class MemoryWriteRequest(BaseModel):
+    """Request to write a shared memory entry."""
+    agent_id: str
+    key: str
+    value: Any
+    ttl_turns: Optional[int] = None
+
+
+@router.post("/instances/{instance_id}/memory", summary="Write a shared memory entry")
+async def write_instance_memory(instance_id: str, body: MemoryWriteRequest):
+    """
+    Write a context entry to the shared instance memory.
+
+    Use structured key namespaces so agents can find each other's context:
+    - ``player:{agent_id}:interactions``   — player action history
+    - ``player:{agent_id}:relationship``   — per-NPC trust summaries
+    - ``npc:{npc_id}:context``             — NPC admin's running notes
+    - ``npc:{npc_id}:dialogue_history``    — recent NPC dialogue
+    - ``world:narrative``                  — storyteller's narrative thread
+    - ``world:facts``                      — established world facts
+    """
+    inst = scenario_instance_manager.get_instance(instance_id)
+    if not inst:
+        raise HTTPException(status_code=404, detail="Instance not found")
+
+    mem = memory_store.get_or_create(instance_id)
+    entry = mem.write(
+        key=body.key,
+        value=body.value,
+        agent_id=body.agent_id,
+        ttl_turns=body.ttl_turns,
+    )
+    return {"instance_id": instance_id, "key": body.key, "written_at": entry.timestamp}
 
 
 @router.get("/instances/{instance_id}/events", summary="Get recent world events for an instance")
@@ -226,6 +378,12 @@ async def instance_action(
         params['prompt_summary'] = request.prompt_summary
 
     success, message, state_update = session.process_action(request.action, params)
+    # Persist gold, inventory, and NPC trust changes after every player action.
+    try:
+        import store.db as db
+        db.save_instance_dict(instance.to_dict())
+    except Exception:
+        pass
     return ActionResponse(
         success=success,
         message=message,
@@ -271,8 +429,7 @@ async def start_scenario_instance(scenario_id: str, background_tasks: Background
     instance = scenario_instance_manager.create_instance(scenario_id)
 
     async def _generate():
-        pool = await get_agent_pool()
-        await generate_world_entities(instance, agent_pool=pool)
+        await generate_world_entities(instance)
 
     background_tasks.add_task(_generate)
 

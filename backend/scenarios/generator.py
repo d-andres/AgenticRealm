@@ -1,19 +1,20 @@
 """
-Scenario Generator - AI-driven dynamic scenario creation
-
-This module provides the interface for AI models (LLMs, Copilot, AgentGPT, etc.)
-to generate unique scenario instances from templates.
+Scenario Generator — rule-based procedural world creation.
 
 When a scenario instance is created via API, this generator:
 1. Takes a ScenarioTemplate from templates.py
-2. Calls an AI model to generate unique:
+2. Uses the built-in rule-based decision maker to generate unique:
    - Store names, locations, proprietor personalities
    - NPC characters, jobs, skills, relationships
    - Item inventories and strategic prices
    - The target item and success conditions
    - Environmental storytelling and flavor
 
-Each generation is unique - no two scenario instances are identical.
+Each generation is unique — no two scenario instances are identical.
+
+NPC AI behaviour (reactions, dialogue, mood) is handled externally by
+npc_admin agents that poll the NpcTaskQueue.  This module only creates
+the initial static world layout.
 """
 
 from typing import Dict, List, Any, Callable, Optional, Tuple
@@ -458,17 +459,16 @@ def _rule_based_decision_maker(generation_type: str, context: Dict) -> Dict:
 
 async def generate_world_entities(
     instance,
-    agent_pool=None,
 ) -> None:
     """Generate all world entities for a ``ScenarioInstance`` and apply them.
 
-    Priority order for the decision maker:
-    1. A connected ``scenario_generator`` AI agent from *agent_pool* (LLM-backed).
-    2. The built-in ``_rule_based_decision_maker`` (instant, no API key needed).
+    Uses the built-in ``_rule_based_decision_maker`` (instant, no LLM needed).
+    All NPC AI decisions are handled externally by ``npc_admin`` agents via the
+    task-queue loop; this function only generates the initial world layout.
 
     The function:
     - Marks the instance as ``"generating"``.
-    - Builds stores, NPCs, and items via the chosen decision maker.
+    - Builds stores, NPCs, and items via the rule-based decision maker.
     - Converts results to :class:`core.state.Entity` objects.
     - Calls ``instance.apply_entities(...)`` which marks the instance ``"active"``.
 
@@ -477,7 +477,6 @@ async def generate_world_entities(
     background.
     """
     from core.state import Entity
-    from ai_agents.interfaces import AgentRole
 
     instance.status = "generating"
     template = instance.scenario
@@ -485,31 +484,13 @@ async def generate_world_entities(
         instance.status = "error"
         return
 
-    # --- Choose decision maker -------------------------------------------
-    def _sync_decision_maker(gen_type: str, ctx: Dict) -> Dict:
+    # Always use the rule-based decision maker.  External scenario_generator
+    # agents may enrich the world after the instance becomes active.
+    def call_sync(gen_type: str, ctx: Dict) -> Dict:
         return _rule_based_decision_maker(gen_type, ctx)
-
-    async def _ai_decision_maker(gen_type: str, ctx: Dict) -> Dict:
-        resp = await agent_pool.request(
-            role=AgentRole.SCENARIO_GENERATOR,
-            action=gen_type,
-            context=ctx,
-        )
-        if resp and resp.success and resp.result and "error" not in resp.result:
-            return resp.result
-        # Fall back to rule-based if AI returns nothing useful
-        return _rule_based_decision_maker(gen_type, ctx)
-
-    use_ai = (
-        agent_pool is not None
-        and AgentRole.SCENARIO_GENERATOR in agent_pool.agents
-        and len(agent_pool.agents[AgentRole.SCENARIO_GENERATOR]) > 0
-    )
 
     async def call(gen_type: str, ctx: Dict) -> Dict:
-        if use_ai:
-            return await _ai_decision_maker(gen_type, ctx)
-        return _sync_decision_maker(gen_type, ctx)
+        return call_sync(gen_type, ctx)
 
     try:
         # 1. Generate stores
@@ -520,7 +501,7 @@ async def generate_world_entities(
             "world_width": template.world_width,
             "world_height": template.world_height,
         })
-        gen = ScenarioGenerator(_sync_decision_maker)
+        gen = ScenarioGenerator(call_sync)
         stores = gen._parse_generated_stores(store_data)
 
         # 2. Generate NPCs

@@ -12,8 +12,12 @@ from datetime import datetime
 import uuid
 
 
+# Valid system agent roles — these agents manage the world rather than playing in it
+SYSTEM_ROLES = {"npc_admin", "scenario_generator", "storyteller", "game_master", "judge"}
+
+
 class Agent:
-    """Metadata record for a registered user agent."""
+    """Metadata record for a registered agent (player or system)."""
 
     def __init__(
         self,
@@ -24,6 +28,7 @@ class Agent:
         model: str,
         system_prompt: str,
         skills: Dict,
+        role: str = "player",
     ):
         self.agent_id = agent_id
         self.name = name
@@ -32,9 +37,14 @@ class Agent:
         self.model = model
         self.system_prompt = system_prompt
         self.skills = skills
+        self.role = role          # "player" | "npc_admin" | "scenario_generator" | ...
         self.created_at = datetime.now()
         self.games_played = 0
         self.games_won = 0
+
+    @property
+    def is_system_agent(self) -> bool:
+        return self.role in SYSTEM_ROLES
 
     def to_dict(self):
         return {
@@ -45,6 +55,8 @@ class Agent:
             'model': self.model,
             'system_prompt': self.system_prompt,
             'skills': self.skills,
+            'role': self.role,
+            'is_system_agent': self.is_system_agent,
             'created_at': self.created_at.isoformat(),
             'games_played': self.games_played,
             'games_won': self.games_won,
@@ -68,9 +80,10 @@ class AgentStore:
             model=agent_data['model'],
             system_prompt=agent_data['system_prompt'],
             skills=agent_data['skills'],
+            role=agent_data.get('role', 'player'),
         )
         self.agents[agent_id] = agent
-        print(f"[AgentStore] Registered agent: {agent.name} ({agent_id})")
+        print(f"[AgentStore] Registered {agent.role} agent: {agent.name} ({agent_id})")
         return agent
 
     def get_agent(self, agent_id: str) -> Optional[Agent]:
@@ -78,6 +91,10 @@ class AgentStore:
 
     def get_all_agents(self) -> List[Agent]:
         return list(self.agents.values())
+
+    def get_by_role(self, role: str) -> List[Agent]:
+        """Return all agents registered with a specific role."""
+        return [a for a in self.agents.values() if a.role == role]
 
     def agent_exists(self, agent_id: str) -> bool:
         return agent_id in self.agents

@@ -13,8 +13,8 @@ Flow:
     → GameState.log_event()
         → EventBus.publish()          ← this file
             → engine tick drains queue
-                → AgentPool.request(NPC_ADMIN, "npc_reaction", ...)
-                    → AI updates NPC properties asynchronously
+                → NpcTaskQueue enqueues a pending reaction task
+                    → external npc_admin agent polls, resolves, and updates NPC state
 """
 
 from collections import defaultdict, deque
