@@ -108,7 +108,7 @@ async function refreshAgentList() {
   if (!el) return;
   try {
     // Fetch system-role agents and all player agents in parallel
-    const SYSTEM_ROLES = ['npc_admin', 'scenario_generator', 'storyteller', 'game_master'];
+    const SYSTEM_ROLES = ['scenario_generator', 'npc_admin', 'storyteller', 'game_master'];
     const [byRoleResults, allAgents] = await Promise.all([
       Promise.all(SYSTEM_ROLES.map(r =>
         apiFetch(`/agents/by-role/${r}`).then(d => d.agents || []).catch(() => [])
@@ -120,7 +120,7 @@ async function refreshAgentList() {
     const playerAgents = allAgents.filter(a => !a.is_system_agent);
 
     if (systemAgents.length === 0 && playerAgents.length === 0) {
-      el.innerHTML = '<div class="muted">No agents connected.  Start an external agent and register it with role <code>npc_admin</code>.</div>';
+      el.innerHTML = '<div class="muted">No agents connected.  Start an external agent and register it with role <code>scenario_generator</code> or <code>npc_admin</code>.</div>';
       return;
     }
 
