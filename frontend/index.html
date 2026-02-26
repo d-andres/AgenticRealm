@@ -221,10 +221,19 @@
     <div class="card">
       <h2>System Agents <span>— connect external agents via the REST API</span> <button class="btn" style="font-size:10px;padding:3px 10px;margin-left:8px;" onclick="App.refreshAgentList()">Refresh</button></h2>
       <p class="muted" style="margin-bottom:0.75rem;">
-        System agents (scenario generator, npc admin, storyteller, game master) register themselves
-        using <code>POST /api/v1/agents/register</code> with a <code>role</code> field and join instances
-        just like player agents.  No API key is stored here.
+        System agents register via REST before world generation.  Use the endpoint below, then hit <strong>Refresh</strong>.
       </p>
+      <div style="margin-bottom:10px;">
+        <div class="join-step">Registration endpoint:</div>
+        <div class="join-url" id="setup-register-url">POST …/api/v1/agents/register</div>
+        <div class="join-step" style="margin-top:6px;">Example payload <span style="color:#446">— set <code>role</code> to one of: <code>scenario_generator</code>, <code>npc_admin</code>, <code>storyteller</code>, <code>game_master</code></span>:</div>
+        <pre class="join-url" style="white-space:pre-wrap;line-height:1.7;">{
+  "name": "my-agent",
+  "role": "scenario_generator",
+  "creator": "operator@example.com",
+  "skills": {}
+}</pre>
+      </div>
       <div id="agent-list"><div class="muted">Loading…</div></div>
     </div>
 

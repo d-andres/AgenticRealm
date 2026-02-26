@@ -475,6 +475,10 @@ checkAPI();
 refreshAgentList();
 loadScenarios();
 
+// Populate registration URL once we know the origin
+const _regEl = document.getElementById('setup-register-url');
+if (_regEl) _regEl.textContent = `POST ${window.location.origin}/api/v1/agents/register`;
+
 // Periodically refresh the agent list while on the setup screen so
 // operators can see external agents connect without reloading the page.
 agentPollTimer = setInterval(refreshAgentList, 5000);
