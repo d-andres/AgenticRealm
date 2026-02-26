@@ -91,15 +91,11 @@ async function loadScenarios() {
 function onScenarioChange() {
   const sel  = document.getElementById('scenario-select');
   const desc = document.getElementById('scenario-desc');
-  const diff = document.getElementById('scenario-difficulty');
   _selectedScenario = _scenarios.find(s => s.scenario_id === sel.value) || null;
   if (_selectedScenario) {
     desc.textContent = _selectedScenario.short_description || _selectedScenario.description.trim().split('\n')[0];
-    const diffMap = { easy: '🟢 Easy', medium: '🟡 Medium', hard: '🔴 Hard' };
-    diff.textContent = diffMap[_selectedScenario.difficulty] || _selectedScenario.difficulty;
   } else {
     desc.textContent = '';
-    diff.textContent = '—';
   }
 }
 
