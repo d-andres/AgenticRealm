@@ -64,6 +64,11 @@ async function checkAPI() {
   } catch { /* stays red */ }
 }
 
+function refreshBaseUrl() {
+  const el = document.getElementById('setup-base-url');
+  if (el) el.textContent = window.location.origin;
+}
+
 // ── VIEW 1 — Setup ─────────────────────────────────────────────────
 
 async function loadScenarios() {
@@ -116,7 +121,7 @@ async function refreshAgentList() {
     const playerAgents = allAgents.filter(a => !a.is_system_agent);
 
     if (systemAgents.length === 0 && playerAgents.length === 0) {
-      el.innerHTML = '<div class="muted">No agents connected.  Start an external agent and register it with role <code>scenario_generator</code> or <code>npc_admin</code>.</div>';
+      el.innerHTML = '<div class="muted">No agents connected.  Start an external agent and register it with one of these roles: <code>scenario_generator</code>, <code>npc_admin</code>, <code>storyteller</code>, <code>game_master</code>.</div>';
       return;
     }
 
@@ -471,6 +476,7 @@ window.App = {
   copyJoinKey,
   onScenarioChange,
   refreshAgentList,
+  refreshBaseUrl,
 };
 
 // ── Boot ─────────────────────────────────────────────────────
@@ -478,6 +484,7 @@ window.App = {
 checkAPI();
 refreshAgentList();
 loadScenarios();
+refreshBaseUrl();
 
 // Populate registration URL once we know the origin
 const _regEl = document.getElementById('setup-register-url');

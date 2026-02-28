@@ -224,7 +224,9 @@
         System agents register via REST before world generation.  Use the endpoint below, then hit <strong>Refresh</strong>.
       </p>
       <div style="margin-bottom:10px;">
-        <div class="join-step">Registration endpoint:</div>
+        <div class="join-step">API Base URL <span style="color:#446">— replace <code>http://YOUR_API_URL</code> in agent templates with this value</span>:</div>
+        <div class="join-url" id="setup-base-url" style="color:var(--green); cursor:pointer;" onclick="navigator.clipboard.writeText(this.textContent).then(()=>{this.textContent+=' ✓';setTimeout(()=>App.refreshBaseUrl(),1500)});">…</div>
+        <div class="join-step" style="margin-top:6px;">Registration endpoint:</div>
         <div class="join-url" id="setup-register-url">POST …/api/v1/agents/register</div>
         <div class="join-step" style="margin-top:6px;">Example payload <span style="color:#446">— set <code>role</code> to one of: <code>scenario_generator</code>, <code>npc_admin</code>, <code>storyteller</code>, <code>game_master</code></span>:</div>
         <pre class="join-url" style="white-space:pre-wrap;line-height:1.7;">{
