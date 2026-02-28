@@ -493,9 +493,9 @@ async def generate_world_entities(
     if generator_agents:
         print(f"[Generator] Found {len(generator_agents)} external generator agent(s). Waiting for 'world:layout'...")
         
-        # Wait up to 10 seconds for the agent to write the world layout
+        # Wait up to 60 seconds for the agent to write the world layout
         mem = memory_store.get_or_create(instance.instance_id)
-        for _ in range(10):
+        for _ in range(60):
             entry = mem.read_latest("world:layout")
             if entry:
                 try:

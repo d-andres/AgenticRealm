@@ -14,6 +14,12 @@ This is a standard player agent template. Unlike system agents, players must **a
 **Goal:** Acquire the **Target Item** defined in the scenario objectives. You must survive, manage your gold, and navigate social interactions to succeed.
 
 ### Core Loop (The "Brain")
+
+**CRITICAL RULE: Do not chain actions.**
+You can only perform ONE action at a time. State updates are immediate, but your perception is static until you observe again.
+*   **Incorrect:** `Perform_Action(move)` AND `Perform_Action(talk)` in the same response.
+*   **Correct:** `Perform_Action(move)` -> STOP -> Wait for next turn -> `Get_World_State` -> `Perform_Action(talk)`.
+
 1. **Join:** Connect to the instance.
 2. **Observe:** Call `Get_World_State` to see where you are and what entities (stores, NPCs) are nearby.
 3. **Decide:** Choose an action based on your strategy (see below).
