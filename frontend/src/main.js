@@ -299,7 +299,7 @@ function renderMap(state) {
   // Draw stores as areas (behind everything else)
   entities.filter(e => e.type === 'store').forEach(e => {
     const x = e.x * sx, y = e.y * sy;
-    const areaW = 36 * sx, areaH = 28 * sy;
+    const areaW = 52 * sx, areaH = 40 * sy;
     // Semi-transparent fill
     ctx.fillStyle = 'rgba(68, 153, 255, 0.12)';
     ctx.fillRect(x - areaW / 2, y - areaH / 2, areaW, areaH);

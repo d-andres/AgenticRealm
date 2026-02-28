@@ -383,11 +383,21 @@ def _rule_based_decision_maker(generation_type: str, context: Dict) -> Dict:
         num = context.get("num_stores", 4)
         world_w = context.get("world_width", 800)
         world_h = context.get("world_height", 600)
+        # Minimum pixel distance between store centres to prevent overlap.
+        # Stores are rendered as ~50x40 areas, so 160 units gives comfortable separation.
+        MIN_STORE_DIST = 160
         stores = []
         for i in range(num):
             stype = rng.choice(["general", "specialty", "black_market", "rare", "shady"])
-            x = rng.uniform(50, world_w - 50)
-            y = rng.uniform(50, world_h - 50)
+            # Try up to 40 times to find a position far enough from existing stores
+            for _attempt in range(40):
+                x = rng.uniform(80, world_w - 80)
+                y = rng.uniform(80, world_h - 80)
+                if all(
+                    ((x - s["x"]) ** 2 + (y - s["y"]) ** 2) ** 0.5 >= MIN_STORE_DIST
+                    for s in stores
+                ):
+                    break
             name = rng.choice(_STORE_NAME_PARTS[0]) + " " + rng.choice(_STORE_NAME_PARTS[1])
             stores.append({
                 "store_id": f"store_{i+1}",

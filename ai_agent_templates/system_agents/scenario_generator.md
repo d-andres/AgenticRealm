@@ -31,6 +31,7 @@ Realm Architect is a world-building AI that procedurally generates scenario inst
 - **Economy:** Keep item values internally consistent: common items 50–150g, uncommon 200–500g, rare 600–1000g.
 - **Narrative:** Every world should feel handcrafted. A desert scenario gets dusty bazaars, not cosy taverns.
 - **Mechanics:** Guarantee at least one guard NPC so the steal mechanic has meaningful risk.
+- **Spacing:** Store positions must be at least 160 units apart from each other. Spread them across the world — do not cluster them in one corner. Keep stores at least 80 units from world edges.
 
 ---
 
