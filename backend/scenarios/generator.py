@@ -476,13 +476,43 @@ async def generate_world_entities(
     the HTTP response is returned immediately while generation happens in the
     background.
     """
+    import asyncio
+    import json
     from core.state import Entity
+    from store.agent_store import agent_store
+    from store.memory_store import memory_store
 
     instance.status = "generating"
     template = instance.scenario
     if template is None:
         instance.status = "error"
         return
+
+    # Check for external Realm Architect agents
+    generator_agents = agent_store.get_by_role("scenario_generator")
+    if generator_agents:
+        print(f"[Generator] Found {len(generator_agents)} external generator agent(s). Waiting for 'world:layout'...")
+        
+        # Wait up to 10 seconds for the agent to write the world layout
+        mem = memory_store.get_or_create(instance.instance_id)
+        for _ in range(10):
+            entry = mem.read_latest("world:layout")
+            if entry:
+                try:
+                    layout = entry["value"]
+                    # If layout is a string (JSON), parse it
+                    if isinstance(layout, str):
+                        layout = json.loads(layout)
+                    
+                    print(f"[Generator] Received external world layout from agent {entry['agent_id']}. Applying...")
+                    await _apply_external_layout(instance, layout, template)
+                    return
+                except Exception as e:
+                    print(f"[Generator] Failed to apply external layout: {e}. Falling back to rule-based.")
+                    break
+            await asyncio.sleep(1.0)
+        
+        print("[Generator] External agent timeout. Falling back to rule-based generation.")
 
     # Always use the rule-based decision maker.  External scenario_generator
     # agents may enrich the world after the instance becomes active.
@@ -601,3 +631,72 @@ async def generate_world_entities(
     except Exception as e:
         print(f"[Generator] Generation failed for {instance.instance_id}: {e}")
         instance.status = "error"
+
+
+async def _apply_external_layout(instance, layout: Dict, template) -> None:
+    """Helper to convert external JSON world layout into internal Entities."""
+    from core.state import Entity
+    
+    entities = []
+    
+    # 1. Parse Stores
+    for s in layout.get("stores", []):
+        # Allow agent flexibility, provide defaults
+        loc = s.get("location") or [
+            random.randint(0, template.world_width), 
+            random.randint(0, template.world_height)
+        ]
+        entities.append(Entity(
+            id=s.get("id") or f"store_{random.randint(1000,9999)}",
+            type="store",
+            x=loc[0],
+            y=loc[1],
+            properties={
+                "name": s.get("name", "Unknown Store"),
+                "proprietor": s.get("proprietor_name", "Shopkeeper"),
+                "proprietor_personality": s.get("proprietor_personality", "Neutral"),
+                "store_type": s.get("store_type", "General"),
+                "pricing_multiplier": s.get("pricing_multiplier", 1.0),
+                "inventory": s.get("inventory", {}),
+                "default_response": s.get("default_response", "The shopkeeper nods."),
+            }
+        ))
+
+    # 2. Parse NPCs
+    for n in layout.get("npcs", []):
+        loc = n.get("location") or [
+            random.randint(0, template.world_width), 
+            random.randint(0, template.world_height)
+        ]
+        job = n.get("job", "Commoner")
+        # Try to guess health from job if not provided
+        max_hp = 100.0
+        if "guard" in job.lower() or "soldier" in job.lower(): max_hp = 150.0
+        elif "thief" in job.lower(): max_hp = 70.0
+        
+        entities.append(Entity(
+            id=n.get("id") or f"npc_{random.randint(1000,9999)}",
+            type="npc",
+            x=loc[0],
+            y=loc[1],
+            properties={
+                "name": n.get("name", "Unknown NPC"),
+                "job": job,
+                "personality": n.get("personality", "Neutral"),
+                "skills": n.get("skills", {}),
+                "trust": n.get("initial_trust", 0.5),
+                "hiring_cost": n.get("hiring_cost"), # None or int
+                "health": n.get("health", max_hp),
+                "max_health": n.get("max_health", max_hp),
+                "status": "alive",
+                "default_response": n.get("default_response", "The NPC watches you."),
+            }
+        ))
+
+    # 3. Target Item
+    target_info = layout.get("target_item", {})
+    target_id = target_info.get("id")
+    
+    # Apply
+    print(f"[Generator] Applying {len(entities)} entities from external agent.")
+    instance.apply_entities(entities, target_item_id=target_id)
