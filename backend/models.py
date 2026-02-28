@@ -53,13 +53,13 @@ class ActionRequest(BaseModel):
     """Request to perform an action in game.
 
     `action` can be any value defined by the active scenario template.
-    Common actions: move, observe, talk, negotiate, buy, hire, steal, trade, interact.
+    Common actions: move, observe, talk, negotiate, buy, hire, steal, trade, interact, attack, improvise.
     The set of valid actions is determined by the scenario's `allowed_actions` field,
     not hardcoded here.
     """
     action: str = Field(
         ...,
-        description="Action type defined by the scenario template (e.g. move, talk, negotiate, buy, hire, steal, trade)"
+        description="Action type defined by the scenario template (e.g. move, talk, negotiate, buy, hire, steal, trade, attack, improvise)"
     )
     params: Dict[str, Any] = Field(default_factory=dict)
     # Optional condensed summary of the agent's input/prompt for display in the public feed

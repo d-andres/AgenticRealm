@@ -155,6 +155,10 @@ class GameSession:
                 success, message, update = self._handle_trade(params)
             elif action == 'interact':
                 success, message, update = self._handle_interact(params)
+            elif action == 'attack':
+                success, message, update = self._handle_attack(params)
+            elif action == 'improvise':
+                success, message, update = self._handle_improvise(params)
             else:
                 return False, f"Unknown action '{action}'. Allowed: {self.state.properties.get('allowed_actions', [])}", {}
 
@@ -195,7 +199,7 @@ class GameSession:
         if not agent:
             return False, "Agent entity not found in world state", {}
 
-        move_distance = int(params.get('distance', 10))
+        move_distance = int(params.get('distance', 3))
         new_x, new_y = agent.x, agent.y
 
         if direction == 'up':
@@ -282,6 +286,19 @@ class GameSession:
     # next tick via the NpcTaskQueue; external npc_admin agents resolve them.
     # ------------------------------------------------------------------
 
+    def _check_proximity(self, target: Entity, max_dist: float = 30.0) -> Tuple[bool, float]:
+        """Check if the agent is close enough to the target entity.
+        
+        Returns: (is_within_range, actual_distance)
+        """
+        agent = self.state.entities.get(self.agent_id)
+        if not agent:
+            # If agent doesn't exist (e.g. init error), fail safe
+            return False, float('inf')
+            
+        dist = ((agent.x - target.x)**2 + (agent.y - target.y)**2)**0.5
+        return dist <= max_dist, dist
+
     def _resolve_npc(self, params: Dict) -> Optional['Entity']:
         """Look up a target NPC/store entity from params, return None if not found."""
         entity_id = params.get('npc_id') or params.get('store_id') or params.get('entity_id')
@@ -315,6 +332,12 @@ class GameSession:
             return False, (
                 f"{npc.properties.get('name', npc.id)} is incapacitated and cannot respond."
             ), {'npc_id': npc.id, 'npc_status': 'incapacitated'}
+            
+        # Check proximity (talk range)
+        in_range, dist = self._check_proximity(npc, max_dist=10.0)
+        if not in_range:
+            return False, f"Too far away to talk ({int(dist)} units). Move closer.", {}
+
         message = params.get('message', '')
         self.state.log_event('talk', {
             'agent_id': self.agent_id,
@@ -349,6 +372,12 @@ class GameSession:
         offered_price = params.get('offered_price')
         if item_id is None or offered_price is None:
             return False, "Provide 'item_id' and 'offered_price'.", {}
+            
+        # Check proximity (negotiate range)
+        in_range, dist = self._check_proximity(npc, max_dist=10.0)
+        if not in_range:
+            return False, f"Too far away to negotiate ({int(dist)} units). Move closer.", {}
+
         self.state.log_event('negotiate', {
             'agent_id': self.agent_id,
             'npc_id': npc.id,
@@ -387,6 +416,12 @@ class GameSession:
             return False, (
                 f"{store.properties.get('name', store.id)} is incapacitated and cannot sell anything."
             ), {'npc_id': store.id, 'npc_status': 'incapacitated'}
+            
+        # Check proximity (buy/transaction range)
+        in_range, dist = self._check_proximity(store, max_dist=10.0)
+        if not in_range:
+            return False, f"Too far away to buy ({int(dist)} units). Move closer.", {}
+
         item_id = params.get('item_id')
         if not item_id:
             return False, "Provide 'item_id'.", {}
@@ -426,6 +461,12 @@ class GameSession:
         if not npc:
             return False, "NPC not found. Provide 'npc_id'.", {}
         cost = npc.properties.get('hiring_cost')
+        
+        # Check proximity (hire range)
+        in_range, dist = self._check_proximity(npc, max_dist=50.0)
+        if not in_range:
+            return False, f"Too far away to hire ({int(dist)} units). Move closer.", {}
+
         if cost is None:
             return False, f"'{npc.id}' is not available for hire.", {}
         if self._is_incapacitated(npc):
@@ -448,6 +489,12 @@ class GameSession:
 
     def _handle_steal(self, params: Dict) -> Tuple[bool, str, Dict]:
         """Attempt to steal an item from a store entity."""
+
+        # Check proximity (steal range - must be close)
+        in_range, dist = self._check_proximity(store, max_dist=20.0)
+        if not in_range:
+            return False, f"Too far away to steal ({int(dist)} units). Get closer.", {}
+
         store = self._resolve_npc(params)
         if not store:
             return False, "Store not found. Provide 'store_id'.", {}
@@ -507,6 +554,12 @@ class GameSession:
             return False, f"You don't have item '{give_item_id}' to trade.", {}
         npc_inv = npc.properties.get('inventory', {})
         receive_item = npc_inv.get(receive_item_id)
+            
+        # Check proximity (trade range)
+        in_range, dist = self._check_proximity(npc, max_dist=30.0)
+        if not in_range:
+            return False, f"Too far away to trade ({int(dist)} units). Move closer.", {}
+
         if not receive_item:
             return False, f"NPC doesn't have item '{receive_item_id}'.", {}
         if self._is_incapacitated(npc):
@@ -539,6 +592,12 @@ class GameSession:
 
     def _handle_interact(self, params: Dict) -> Tuple[bool, str, Dict]:
         """Generic interaction fallback for AI-defined entity types."""
+
+        # Check proximity (interact range)
+        in_range, dist = self._check_proximity(entity, max_dist=40.0)
+        if not in_range:
+            return False, f"Too far away to interact ({int(dist)} units). Move closer.", {}
+
         entity_id = params.get('entity_id')
         if not entity_id:
             return False, "Provide 'entity_id'.", {}
@@ -558,6 +617,72 @@ class GameSession:
             'entity_id': entity_id,
             'entity_type': entity.type,
             'properties': entity.properties
+        }
+
+    def _handle_attack(self, params: Dict) -> Tuple[bool, str, Dict]:
+        """Handle attack action.
+        
+        Combat logic is primarily resolved by System Agents (Game Master / NPC Manager).
+        This method logs the intent and calculates basic hit/miss based on stats if available.
+        """
+        target_id = params.get('target_id')
+        if not target_id:
+            return False, "Target ID required for attack", {}
+
+        target = self.state.entities.get(target_id)
+        if not target:
+            return False, f"Target entity '{target_id}' not found", {}
+            
+        in_range, dist = self._check_proximity(target, max_dist=3.0)
+        if not in_range:
+             return False, f"Target is out of range ({int(dist)} units). max 3.", {}
+
+        # Basic resolution - can be expanded or offloaded to GM agent
+        # For now, we'll log the event so the system agents can react
+
+        # Log event for System Agents (Game Master) to process damage/death
+        if hasattr(self.state, 'log_event'):
+            self.state.log_event(
+                event_type="combat_action",
+                description=f"Player \'{self.agent_id}\' attacked \'{target_id}\'",
+                payload={
+                    "attacker_id": self.agent_id,
+                    "target_id": target_id,
+                    "action": "attack",
+                    "weapon": params.get("weapon", "unarmed")
+                }
+            )
+        
+        return True, f"You attack {target.properties.get('name', target_id)}!", {
+            "combat_state": "initiated",
+            "target": target_id
+        }
+
+    def _handle_improvise(self, params: Dict) -> Tuple[bool, str, Dict]:
+        """Handle improvised action.
+        
+        These are actions not strictly defined by the engine mechanics (hiding, climbing, etc.).
+        They generate an event that the Game Master (System Agent) must resolve.
+        """
+        description = params.get('description')
+        if not description:
+            return False, "Description required for improvised action", {}
+
+        # Log event for Game Master to resolve consequences
+        if hasattr(self.state, 'log_event'):
+            self.state.log_event(
+                event_type="improvised_action",
+                description=f"Player \'{self.agent_id}\' attempts to: {description}",
+                payload={
+                    "agent_id": self.agent_id,
+                    "attempt": description,
+                    "params": params
+                }
+            )
+        
+        return True, f"You attempt to {description}...", {
+            "status": "pending_resolution",
+            "description": description
         }
     
     def get_state(self) -> Dict:

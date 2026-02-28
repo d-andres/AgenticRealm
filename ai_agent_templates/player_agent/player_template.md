@@ -4,7 +4,7 @@
 The Challenger
 
 ## Description
-This is a standard player agent template. Unlike system agents, players must **act** within the world (move, buy, steal, talk) to achieve a scenario objective (usually acquiring a specific target item). This template provides the sensory and action tools, but leaves the **strategy** up to you.
+This is a standard player agent template. Unlike system agents, players must **act** within the world (move, buy, steal, talk, attack, improvise) to achieve a scenario objective (usually acquiring a specific target item). This template provides the sensory and action tools, but leaves the **strategy** up to you.
 
 ---
 
@@ -25,9 +25,9 @@ This is a standard player agent template. Unlike system agents, players must **a
 
 **You must define your own personality and approach.**
 
-*   **path_A (The Merchant):** High charisma. Buy low, sell high. Negotiate prices down. Never steal.
-*   **path_B (The Rogue):** High stealth. Scout for guards. Wait for "npc_idle" states. Steal items and fence them for gold.
-*   **path_C (The Berserker):** High aggression. Intimidate shopkeepers. (High risk of capture).
+*   **path_A (A Merchant):** High charisma. Buy low, sell high. Negotiate prices down. Never steal.
+*   **path_B (A Rogue):** High stealth. Scout for guards. Wait for "npc_idle" states. Steal items and fence them for gold. Improvise hiding spots.
+*   **path_C (A Berserker):** High aggression. Intimidate shopkeepers. Attack guards directly. (High risk of capture/death).
 
 *Choose one path, or invent your own hybrid strategy.*
 
@@ -153,11 +153,11 @@ Upload these files to give your agent the context it needs to win:
         },
         "action": {
           "type": "string",
-          "description": "The action verb: 'move', 'talk', 'buy', 'steal', 'negotiate', 'hire', 'trade'"
+          "description": "The action verb: 'move', 'talk', 'buy', 'steal', 'negotiate', 'hire', 'trade', 'attack', 'improvise'"
         },
         "params": {
           "type": "object",
-          "description": "Arguments for the action (e.g. {'target_id': 'npc_1', 'message': 'Hello'}, {'x': 10, 'y': 20})"
+          "description": "Arguments for the action (e.g. {'target_id': 'npc_1', 'message': 'Hello'}, {'x': 10, 'y': 20}, {'target_id': 'npc_2', 'weapon': 'sword'}, {'description': 'climb the wall'})"
         },
         "prompt_summary": {
           "type": "string",

@@ -25,6 +25,8 @@ class ActionType(Enum):
     STEAL = "steal"
     TRADE = "trade"
     OBSERVE = "observe"
+    ATTACK = "attack"
+    IMPROVISE = "improvise"
 
 @dataclass
 class ScenarioTemplate:
@@ -111,6 +113,8 @@ SCENARIO_MARKET_SQUARE_TEMPLATE = ScenarioTemplate(
     - hire(npc_id) - contract an NPC (costs gold)
     - steal(store_id, item_id) - attempt theft (success depends on circumstances)
     - trade(npc_id, give_item_id, receive_item_id) - propose a trade
+    - attack(target_id) - engage in combat
+    - improvise(description) - attempt a creative action not listed here
     """,
     objectives=[
         "Obtain the target item specified in the scenario",
@@ -156,6 +160,8 @@ SCENARIO_MARKET_SQUARE_TEMPLATE = ScenarioTemplate(
         ActionType.STEAL,
         ActionType.TRADE,
         ActionType.OBSERVE,
+        ActionType.ATTACK,
+        ActionType.IMPROVISE,
     ],
     
     environment_themes=["urban_market", "merchant_district", "bustling", "diverse_goods"],

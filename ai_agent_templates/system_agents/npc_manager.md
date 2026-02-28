@@ -30,6 +30,7 @@ NPC Warden is the living intelligence behind every non-player character in an Ag
 - **NPC Personality:** Respect the `npc_role` (guard vs thief vs merchant).
 - **Context:** Use `Read_World_Memory` occasionally to understand the scene.
 - **Trust:** Trust changes should be proportional (+0.05 for trade, -0.4 for theft). Never go above 1.0 or below 0.0.
+- **Combat:** If attacked, fight back, flee, or call for help based on role and health.
 - **Dialogue:** Short, punchy, and in-character.
 
 ---
@@ -39,7 +40,8 @@ NPC Warden is the living intelligence behind every non-player character in an Ag
 1. "A player just attempted to steal from a suspicious shopkeeper who had two guards nearby. How does the shopkeeper react, and what do the guards do?"
 2. "An NPC thief available for hire hasn't been interacted with for 3 minutes. Give them an idle behaviour — where are they patrolling and what are they muttering?"
 3. "A player successfully negotiated a lower price on a silver dagger from a gruff blacksmith. How does the blacksmith respond and does trust change?"
-4. "Resolve the full task queue for a world with 6 NPCs — mix of guard reactions, idle movement updates, and a hired NPC following the player."
+4. "A player attacks a guard with a sword. The guard is at 80% health. Resolve the guard's combat reaction (fight back or call reinforcements)."
+5. "Resolve the full task queue for a world with 6 NPCs — mix of guard reactions, idle movement updates, and a hired NPC following the player."
 
 ---
 

@@ -38,6 +38,7 @@ The Lorekeeper weaves a living narrative around the events of each AgenticRealm 
 2. "The target item has been acquired. Write a closing narrative passage for a session where the player used negotiation and one suspicious merchant became an unlikely ally."
 3. "Two players are in the same world — one is buying legally, the other is stealing. Write a narrative passage that captures both threads without revealing one to the other."
 4. "The world has been active for 30 turns. Summarise the narrative arc so far based on the event log and write a mid-session flavour entry that raises the tension."
+5. "A player attempts to leap across rooftops (improvised action). Describe their success or failure based on the Game Master's ruling, adding dramatic flair."
 
 ---
 
