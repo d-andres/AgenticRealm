@@ -205,8 +205,6 @@ function updateJoinInfo() {
   const code = instanceId.slice(0, 8).toUpperCase();
   document.getElementById('join-code').textContent = code;
   const base = window.location.origin;
-  document.getElementById('join-register-url').textContent =
-    `POST ${base}/api/v1/agents/register`;
   document.getElementById('join-instance-url').textContent =
     `POST ${base}/api/v1/scenarios/instances/${instanceId}/join?agent_id=YOUR_AGENT_ID`;
 }
