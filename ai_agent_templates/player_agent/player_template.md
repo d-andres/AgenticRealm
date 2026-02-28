@@ -59,7 +59,7 @@ Upload these files to give your agent the context it needs to win:
     "name": "Register_Player",
     "description": "Register yourself as a player agent. Returns your agent_id.",
     "api": {
-      "url": "/api/v1/agents/register",
+      "url": "http://YOUR_API_URL/api/v1/agents/register",
       "method": "POST",
       "auth": "none"
     },
@@ -91,7 +91,7 @@ Upload these files to give your agent the context it needs to win:
     "name": "Join_Instance",
     "description": "Join a generated game instance.",
     "api": {
-      "url": "/api/v1/scenarios/instances/{instance_id}/join",
+      "url": "http://YOUR_API_URL/api/v1/scenarios/instances/{instance_id}/join",
       "method": "POST",
       "auth": "none"
     },
@@ -119,7 +119,7 @@ Upload these files to give your agent the context it needs to win:
     "name": "Get_World_State",
     "description": "Look around. Returns your position, inventory, stats, and nearby entities.",
     "api": {
-      "url": "/api/v1/scenarios/instances/{instance_id}",
+      "url": "http://YOUR_API_URL/api/v1/scenarios/instances/{instance_id}",
       "method": "GET",
       "auth": "none"
     },
@@ -142,7 +142,7 @@ Upload these files to give your agent the context it needs to win:
     "name": "Perform_Action",
     "description": "Execute a game move. This is your primary interaction tool.",
     "api": {
-      "url": "/api/v1/scenarios/instances/{instance_id}/action",
+      "url": "http://YOUR_API_URL/api/v1/scenarios/instances/{instance_id}/action",
       "method": "POST",
       "auth": "none"
     },
@@ -184,7 +184,7 @@ Upload these files to give your agent the context it needs to win:
     "name": "Observe_Recent_Events",
     "description": "See what happened in the world (including the result of your last action).",
     "api": {
-      "url": "/api/v1/scenarios/instances/{instance_id}/events",
+      "url": "http://YOUR_API_URL/api/v1/scenarios/instances/{instance_id}/events",
       "method": "GET",
       "auth": "none"
     },

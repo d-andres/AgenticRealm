@@ -64,7 +64,7 @@ Upload these files to the agent to improve consistency and personalisation:
     "name": "Register_Scenario_Generator",
     "description": "Register this agent with the server and receive an agent_id. Returns the new agent_id.",
     "api": {
-      "url": "/api/v1/agents/register",
+      "url": "http://YOUR_API_URL/api/v1/agents/register",
       "method": "POST",
       "auth": "none"
     },
@@ -96,7 +96,7 @@ Upload these files to the agent to improve consistency and personalisation:
     "name": "List_Scenario_Templates",
     "description": "Fetch all available scenario templates to read constraints before generating.",
     "api": {
-      "url": "/api/v1/scenarios",
+      "url": "http://YOUR_API_URL/api/v1/scenarios",
       "method": "GET",
       "auth": "none"
     },
@@ -112,7 +112,7 @@ Upload these files to the agent to improve consistency and personalisation:
     "name": "Get_Scenario_Template",
     "description": "Read a single template's constraints: num_npcs, num_stores, themes, objectives, starting_gold.",
     "api": {
-      "url": "/api/v1/scenarios/{scenario_id}",
+      "url": "http://YOUR_API_URL/api/v1/scenarios/{scenario_id}",
       "method": "GET",
       "auth": "none"
     },
@@ -135,7 +135,7 @@ Upload these files to the agent to improve consistency and personalisation:
     "name": "List_Instances",
     "description": "Poll for instances in 'generating' status that need a world built.",
     "api": {
-      "url": "/api/v1/scenarios/instances",
+      "url": "http://YOUR_API_URL/api/v1/scenarios/instances",
       "method": "GET",
       "auth": "none"
     },
@@ -151,7 +151,7 @@ Upload these files to the agent to improve consistency and personalisation:
     "name": "Get_Instance_State",
     "description": "Read the current world state and status of a specific instance.",
     "api": {
-      "url": "/api/v1/scenarios/instances/{instance_id}",
+      "url": "http://YOUR_API_URL/api/v1/scenarios/instances/{instance_id}",
       "method": "GET",
       "auth": "none"
     },
@@ -174,7 +174,7 @@ Upload these files to the agent to improve consistency and personalisation:
     "name": "Write_World_Memory",
     "description": "Publish the generated world layout so NPC Manager and Storyteller can read it.",
     "api": {
-      "url": "/api/v1/scenarios/instances/{instance_id}/memory",
+      "url": "http://YOUR_API_URL/api/v1/scenarios/instances/{instance_id}/memory",
       "method": "POST",
       "auth": "none"
     },
@@ -212,7 +212,7 @@ Upload these files to the agent to improve consistency and personalisation:
     "name": "Read_Instance_Memory",
     "description": "Check if another agent has already seeded this instance's world context.",
     "api": {
-      "url": "/api/v1/scenarios/instances/{instance_id}/memory",
+      "url": "http://YOUR_API_URL/api/v1/scenarios/instances/{instance_id}/memory",
       "method": "GET",
       "auth": "none"
     },

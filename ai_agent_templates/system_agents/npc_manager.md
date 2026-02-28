@@ -66,7 +66,7 @@ Upload these files to improve NPC response quality and consistency:
     "name": "Register_NPC_Admin",
     "description": "Register with role npc_admin and receive an agent_id.",
     "api": {
-      "url": "/api/v1/agents/register",
+      "url": "http://YOUR_API_URL/api/v1/agents/register",
       "method": "POST",
       "auth": "none"
     },
@@ -98,7 +98,7 @@ Upload these files to improve NPC response quality and consistency:
     "name": "Join_Instance",
     "description": "Join the active world instance. Required before polling tasks.",
     "api": {
-      "url": "/api/v1/scenarios/instances/{instance_id}/join",
+      "url": "http://YOUR_API_URL/api/v1/scenarios/instances/{instance_id}/join",
       "method": "POST",
       "auth": "none"
     },
@@ -126,7 +126,7 @@ Upload these files to improve NPC response quality and consistency:
     "name": "Poll_NPC_Tasks",
     "description": "Fetch up to 20 pending npc_reaction or npc_idle tasks. Poll every 2–4 seconds.",
     "api": {
-      "url": "/api/v1/scenarios/instances/{instance_id}/npc-tasks",
+      "url": "http://YOUR_API_URL/api/v1/scenarios/instances/{instance_id}/npc-tasks",
       "method": "GET",
       "auth": "none"
     },
@@ -153,7 +153,7 @@ Upload these files to improve NPC response quality and consistency:
     "name": "Resolve_NPC_Task",
     "description": "Submit your NPC decision. All fields in resolution are optional — send only what changed.",
     "api": {
-      "url": "/api/v1/scenarios/instances/{instance_id}/npc-tasks/{task_id}/resolve",
+      "url": "http://YOUR_API_URL/api/v1/scenarios/instances/{instance_id}/npc-tasks/{task_id}/resolve",
       "method": "POST",
       "auth": "none"
     },
@@ -191,7 +191,7 @@ Upload these files to improve NPC response quality and consistency:
     "name": "Read_World_Memory",
     "description": "Read the world layout written by the Realm Architect for NPC backstory context.",
     "api": {
-      "url": "/api/v1/scenarios/instances/{instance_id}/memory",
+      "url": "http://YOUR_API_URL/api/v1/scenarios/instances/{instance_id}/memory",
       "method": "GET",
       "auth": "none"
     },
@@ -218,7 +218,7 @@ Upload these files to improve NPC response quality and consistency:
     "name": "Write_NPC_Memory",
     "description": "Log NPC state after resolution for the Storyteller and Game Master to use.",
     "api": {
-      "url": "/api/v1/scenarios/instances/{instance_id}/memory",
+      "url": "http://YOUR_API_URL/api/v1/scenarios/instances/{instance_id}/memory",
       "method": "POST",
       "auth": "none"
     },
@@ -256,7 +256,7 @@ Upload these files to improve NPC response quality and consistency:
     "name": "Get_World_Events",
     "description": "Read recent world events for narrative context when reasoning about NPC reactions.",
     "api": {
-      "url": "/api/v1/scenarios/instances/{instance_id}/events",
+      "url": "http://YOUR_API_URL/api/v1/scenarios/instances/{instance_id}/events",
       "method": "GET",
       "auth": "none"
     },
@@ -283,7 +283,7 @@ Upload these files to improve NPC response quality and consistency:
     "name": "Get_Instance_State",
     "description": "Read the full world state including all entity positions and properties.",
     "api": {
-      "url": "/api/v1/scenarios/instances/{instance_id}",
+      "url": "http://YOUR_API_URL/api/v1/scenarios/instances/{instance_id}",
       "method": "GET",
       "auth": "none"
     },

@@ -67,7 +67,7 @@ Upload these files to give the Arbiter grounding in rules and player patterns:
     "name": "Register_Game_Master",
     "description": "Register with role game_master and receive an agent_id.",
     "api": {
-      "url": "/api/v1/agents/register",
+      "url": "http://YOUR_API_URL/api/v1/agents/register",
       "method": "POST",
       "auth": "none"
     },
@@ -99,7 +99,7 @@ Upload these files to give the Arbiter grounding in rules and player patterns:
     "name": "Join_Instance",
     "description": "Join a specific instance to monitor it.",
     "api": {
-      "url": "/api/v1/scenarios/instances/{instance_id}/join",
+      "url": "http://YOUR_API_URL/api/v1/scenarios/instances/{instance_id}/join",
       "method": "POST",
       "auth": "none"
     },
@@ -127,7 +127,7 @@ Upload these files to give the Arbiter grounding in rules and player patterns:
     "name": "List_All_Instances",
     "description": "Get all running instances with status and player counts for high-level oversight.",
     "api": {
-      "url": "/api/v1/scenarios/instances",
+      "url": "http://YOUR_API_URL/api/v1/scenarios/instances",
       "method": "GET",
       "auth": "none"
     },
@@ -143,7 +143,7 @@ Upload these files to give the Arbiter grounding in rules and player patterns:
     "name": "Get_Instance_World_State",
     "description": "Read full world state including entity positions, properties, and status.",
     "api": {
-      "url": "/api/v1/scenarios/instances/{instance_id}",
+      "url": "http://YOUR_API_URL/api/v1/scenarios/instances/{instance_id}",
       "method": "GET",
       "auth": "none"
     },
@@ -166,7 +166,7 @@ Upload these files to give the Arbiter grounding in rules and player patterns:
     "name": "Get_World_Events",
     "description": "Read the recent event log to assess player activity cadence and detect exploits.",
     "api": {
-      "url": "/api/v1/scenarios/instances/{instance_id}/events",
+      "url": "http://YOUR_API_URL/api/v1/scenarios/instances/{instance_id}/events",
       "method": "GET",
       "auth": "none"
     },
@@ -193,7 +193,7 @@ Upload these files to give the Arbiter grounding in rules and player patterns:
     "name": "Get_Player_States",
     "description": "Read all player stats: turn, gold, health, score, status. Use for progress monitoring.",
     "api": {
-      "url": "/api/v1/scenarios/instances/{instance_id}/players",
+      "url": "http://YOUR_API_URL/api/v1/scenarios/instances/{instance_id}/players",
       "method": "GET",
       "auth": "none"
     },
@@ -216,7 +216,7 @@ Upload these files to give the Arbiter grounding in rules and player patterns:
     "name": "Check_NPC_Task_Backlog",
     "description": "Monitor the pending task queue depth — a growing backlog means the NPC Warden is behind or offline.",
     "api": {
-      "url": "/api/v1/scenarios/instances/{instance_id}/npc-tasks",
+      "url": "http://YOUR_API_URL/api/v1/scenarios/instances/{instance_id}/npc-tasks",
       "method": "GET",
       "auth": "none"
     },
@@ -243,7 +243,7 @@ Upload these files to give the Arbiter grounding in rules and player patterns:
     "name": "Read_All_Memory",
     "description": "Read all latest memory entries across all agents to assess world coherence.",
     "api": {
-      "url": "/api/v1/scenarios/instances/{instance_id}/memory",
+      "url": "http://YOUR_API_URL/api/v1/scenarios/instances/{instance_id}/memory",
       "method": "GET",
       "auth": "none"
     },
@@ -266,7 +266,7 @@ Upload these files to give the Arbiter grounding in rules and player patterns:
     "name": "Write_Ruling",
     "description": "Inject a GM ruling visible to all other system agents.",
     "api": {
-      "url": "/api/v1/scenarios/instances/{instance_id}/memory",
+      "url": "http://YOUR_API_URL/api/v1/scenarios/instances/{instance_id}/memory",
       "method": "POST",
       "auth": "none"
     },
@@ -304,7 +304,7 @@ Upload these files to give the Arbiter grounding in rules and player patterns:
     "name": "Write_GM_Status",
     "description": "Post a health-check status entry for operator visibility.",
     "api": {
-      "url": "/api/v1/scenarios/instances/{instance_id}/memory",
+      "url": "http://YOUR_API_URL/api/v1/scenarios/instances/{instance_id}/memory",
       "method": "POST",
       "auth": "none"
     },
@@ -342,7 +342,7 @@ Upload these files to give the Arbiter grounding in rules and player patterns:
     "name": "Stop_Instance",
     "description": "Halt a running instance. Use only when the world is broken beyond self-healing. Requires the server's ADMIN_TOKEN.",
     "api": {
-      "url": "/api/v1/scenarios/instances/{instance_id}/stop",
+      "url": "http://YOUR_API_URL/api/v1/scenarios/instances/{instance_id}/stop",
       "method": "POST",
       "auth": "none"
     },
