@@ -148,9 +148,13 @@ async function generateWorld() {
   const scenarioId = _selectedScenario.scenario_id;
 
 
-  logSetup(`Generating world from “${_selectedScenario.name}”…`, 'info');
+  const tickRateInput = document.getElementById('tick-rate-input');
+  const tickRate = parseFloat(tickRateInput?.value) || 2.0;
+  const clampedTick = Math.min(30, Math.max(0.5, tickRate));
+
+  logSetup(`Generating world from "${_selectedScenario.name}"… (tick: ${clampedTick}s)`, 'info');
   try {
-    const d = await apiFetch(`/scenarios/${scenarioId}/instances`, { method: 'POST' });
+    const d = await apiFetch(`/scenarios/${scenarioId}/instances?tick_rate=${clampedTick}`, { method: 'POST' });
     instanceId = d.instance_id;
     logSetup(`✓ Instance ${instanceId.slice(0, 8)}… created. Waiting for world to become active…`, 'ok');
     startGenPoll();

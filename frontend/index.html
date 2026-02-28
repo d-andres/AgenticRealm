@@ -247,6 +247,11 @@
             <option value="">Loading scenarios…</option>
           </select>
         </div>
+        <div class="field" style="max-width:130px; flex:0;">
+          <label title="Engine tick interval in seconds. Lower = faster simulation, more token usage.">Tick Rate (s)</label>
+          <input id="tick-rate-input" type="number" value="2" min="0.5" max="30" step="0.5"
+            style="width:100%;" title="How often the engine ticks (seconds). Default: 2">
+        </div>
       </div>
 
       <p id="scenario-desc" style="color:var(--muted); margin:10px 0 14px; line-height:1.8; font-size:12px; min-height:2.4em;"></p>

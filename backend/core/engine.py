@@ -15,9 +15,10 @@ Each tick processes every active ScenarioInstance through three phases:
     resolve tasks via POST /instances/{id}/npc-tasks/{task_id}/resolve.
     Tasks not resolved within TASK_TTL_SECONDS are expired silently.
 
-  Autonomous Phase  (every _NPC_IDLE_EVERY_TICKS ticks)
+  Autonomous Phase  (every NPC_IDLE_EVERY_TICKS ticks, default 60 = ~2 min at 2 s/tick)
     Each NPC that was not already handled in the reaction phase receives
     an "npc_idle" task so external agents can drive patrol/mood/dialogue.
+    Configurable via the NPC_IDLE_EVERY_TICKS env var to control token spend.
 
 This design makes all AI decision-making external and truly agentic:
   - External agents run their own loop with memory and planning
@@ -26,10 +27,15 @@ This design makes all AI decision-making external and truly agentic:
 """
 
 import asyncio
+import os
 from typing import Any, Dict, List, Optional
 
-# How often (in engine ticks) each NPC gets an autonomous "idle" task.
-_NPC_IDLE_EVERY_TICKS: int = 15
+# How often (in engine ticks) each NPC receives an autonomous "idle" task.
+# Reaction tasks (triggered by player actions) are unaffected by this value.
+# At the default tick rate of 2 s:  60 ticks = 2 minutes between idle bursts.
+# Lower this for more responsive idle behaviour (more LLM calls/tokens).
+# Override at runtime with the NPC_IDLE_EVERY_TICKS environment variable.
+_NPC_IDLE_EVERY_TICKS: int = int(os.getenv('NPC_IDLE_EVERY_TICKS', '60'))
 
 
 class GameEngine:

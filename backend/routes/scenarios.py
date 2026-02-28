@@ -413,7 +413,11 @@ async def get_scenario(scenario_id: str):
 
 
 @router.post("/{scenario_id}/instances", summary="Create a new scenario instance")
-async def start_scenario_instance(scenario_id: str, background_tasks: BackgroundTasks):
+async def start_scenario_instance(
+    scenario_id: str,
+    background_tasks: BackgroundTasks,
+    tick_rate: Optional[float] = Query(None, ge=0.5, le=30.0, description="Engine tick interval in seconds (0.5–30). Updates the global engine rate."),
+):
     """
     Spawn a persistent always-on world from a scenario template.
 
@@ -426,6 +430,12 @@ async def start_scenario_instance(scenario_id: str, background_tasks: Background
     """
     if not ScenarioManager.get_template(scenario_id):
         raise HTTPException(status_code=404, detail="Scenario not found")
+
+    # Apply requested tick rate to the running engine before generation starts.
+    from core.engine import get_engine
+    if tick_rate is not None:
+        get_engine().tick_rate = tick_rate
+
     instance = scenario_instance_manager.create_instance(scenario_id)
 
     async def _generate():
@@ -437,6 +447,7 @@ async def start_scenario_instance(scenario_id: str, background_tasks: Background
         'instance_id': instance.instance_id,
         'scenario_id': scenario_id,
         'status': instance.status,
+        'tick_rate': get_engine().tick_rate,
         'message': 'World generation started. Poll status until active.',
         'created_at': instance.created_at.isoformat(),
     }
