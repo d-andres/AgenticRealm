@@ -298,36 +298,33 @@ function renderMap(state) {
 
   const entities = Object.values(state?.entities || {});
 
-  // Draw stores first (behind everything else)
+  // Draw stores as areas (behind everything else)
   entities.filter(e => e.type === 'store').forEach(e => {
-    const x = e.x * sx, y = e.y * sy, r = 5;
-    ctx.fillStyle = COLOR.store;
-    ctx.fillRect(x - r, y - r, r * 2, r * 2);
-    ctx.strokeStyle = '#224488';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(x - r, y - r, r * 2, r * 2);
+    const x = e.x * sx, y = e.y * sy;
+    const areaW = 36 * sx, areaH = 28 * sy;
+    // Semi-transparent fill
+    ctx.fillStyle = 'rgba(68, 153, 255, 0.12)';
+    ctx.fillRect(x - areaW / 2, y - areaH / 2, areaW, areaH);
+    // Border
+    ctx.strokeStyle = '#4499ff';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(x - areaW / 2, y - areaH / 2, areaW, areaH);
+    // Name label centered
     const name = e.properties?.name || '';
     if (name) {
-      ctx.fillStyle = '#446699';
+      ctx.fillStyle = '#7ab8ff';
       ctx.font = '9px monospace';
-      ctx.fillText(name, x + r + 3, y + 4);
+      ctx.textAlign = 'center';
+      ctx.fillText(name, x, y + 4);
+      ctx.textAlign = 'left';
     }
   });
 
-  // Draw items, hazards, exits
-  ['item', 'hazard', 'exit'].forEach(type => {
-    entities.filter(e => e.type === type).forEach(e => {
-      const x = e.x * sx, y = e.y * sy;
-      ctx.fillStyle = COLOR[type] || '#888';
-      if (type === 'hazard') {
-        ctx.strokeStyle = COLOR.hazard;
-        ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.moveTo(x - 4, y - 4); ctx.lineTo(x + 4, y + 4); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(x + 4, y - 4); ctx.lineTo(x - 4, y + 4); ctx.stroke();
-      } else {
-        ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill();
-      }
-    });
+  // Draw items (small, behind NPCs)
+  entities.filter(e => e.type === 'item').forEach(e => {
+    const x = e.x * sx, y = e.y * sy;
+    ctx.fillStyle = COLOR.item;
+    ctx.beginPath(); ctx.arc(x, y, 2, 0, Math.PI * 2); ctx.fill();
   });
 
   // Draw NPCs
@@ -356,10 +353,9 @@ function renderMap(state) {
     ctx.lineWidth = 1.5;
     ctx.stroke();
     ctx.shadowBlur = 0;
-    const name = e.properties?.name || e.id.slice(0, 8);
     ctx.fillStyle = '#00cc00';
     ctx.font = 'bold 9px monospace';
-    ctx.fillText(name, x + 9, y + 4);
+    ctx.fillText('Player', x + 9, y + 4);
   });
 }
 
