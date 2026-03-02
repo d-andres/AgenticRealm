@@ -39,18 +39,6 @@ You can only perform ONE action at a time. State updates are immediate, but your
 
 ---
 
-## Knowledge
-
-Upload these files to give your agent the context it needs to win:
-
-| File | Format | Purpose |
-|------|--------|---------|
-| `item_values.csv` | `.csv` | Reference list of base prices so you know if a merchant is ripping you off |
-| `npc_psychology.md` | `.md` | Guide on which NPC jobs (Guard vs Commoner) are most suspicious or dangerous |
-| `map_navigation.md` | `.md` | Rules for movement (x,y coordinates) and distance calculations |
-
----
-
 ## Public API
 
 ```json
