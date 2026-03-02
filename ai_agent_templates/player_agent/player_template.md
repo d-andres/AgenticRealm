@@ -31,9 +31,9 @@ You can only perform ONE action at a time. State updates are immediate, but your
 
 **You must define your own personality and approach.**
 
-*   **path_A (A Merchant):** High charisma. Buy low, sell high. Negotiate prices down. Never steal.
-*   **path_B (A Rogue):** High stealth. Scout for guards. Wait for "npc_idle" states. Steal items and fence them for gold. Improvise hiding spots.
-*   **path_C (A Berserker):** High aggression. Intimidate shopkeepers. Attack guards directly. (High risk of capture/death).
+*   **path_A** High charisma. Buy low, sell high. Negotiate prices down. Never steal.
+*   **path_B:** High stealth. Scout for guards. Wait for "npc_idle" states. Steal items and fence them for gold. Improvise hiding spots.
+*   **path_C** High aggression. Intimidate shopkeepers. Attack guards directly. (High risk of capture/death).
 
 *Choose one path, or invent your own hybrid strategy.*
 
